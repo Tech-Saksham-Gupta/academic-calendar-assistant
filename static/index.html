@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f8fc">
+  <meta name="description" content="Your AI companion for academic dates, deadlines, and course information.">
+  <title>Campus Compass — Academic Assistant</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="App navigation">
+      <a class="brand" href="/" aria-label="Campus Compass home"><span class="brand-icon">✳</span><span>campus<span class="brand-light">compass</span></span></a>
+      <div class="campus-card"><div class="campus-mark">CC</div><div><strong>Student workspace</strong><span>Academic year 2026–27</span></div><span class="chevron">⌄</span></div>
+      <div class="nav-label">WORKSPACE</div>
+      <button class="nav-item active" type="button"><span>▦</span> Ask the assistant</button>
+      <button class="nav-item" id="calendar-nav" type="button"><span>▣</span> Academic calendar</button>
+      <div class="nav-label sources-label">KNOWLEDGE</div>
+      <div class="source-item"><span class="file-icon purple">▤</span><div><strong>AI course syllabus</strong><span>Starter course knowledge</span></div></div>
+      <div class="source-item"><span class="file-icon green">▦</span><div><strong>Academic calendar</strong><span>Upload your institution calendar</span></div></div>
+      <div class="sidebar-bottom">
+        <div class="help-card"><div class="help-icon">✦</div><strong>Make it yours</strong><p>Add your official calendar and course documents for answers tailored to your campus.</p><button id="add-source" class="text-button" type="button">Add a source <span>↗</span></button></div>
+        <div class="profile"><div class="avatar">S</div><div><strong>Student</strong><span>Personal workspace</span></div><span class="more">···</span></div>
+      </div>
+    </aside>
+
+    <main class="main-area">
+      <header class="topbar"><div class="crumb">Workspace <span>/</span> <strong>Assistant</strong></div><div class="top-actions"><div class="status"><i></i><span id="status-text">Assistant ready</span></div><button class="icon-button" aria-label="Help" title="Help">?</button></div></header>
+      <section class="content" id="chat-content">
+        <div class="welcome" id="welcome">
+          <div class="welcome-mark"><span>✳</span></div>
+          <div class="eyebrow">YOUR ACADEMIC SIDEKICK</div>
+          <h1>Make your semester<br><em>make sense.</em></h1>
+          <p class="intro">Get clear answers about important dates, deadlines, and your course — all in one place.</p>
+          <div class="suggestions-label">A FEW THINGS YOU CAN ASK</div>
+          <div class="suggestions">
+            <button class="suggestion" data-question="When does the semester begin?" type="button"><span class="suggestion-icon date">▣</span><span><strong>When does the semester begin?</strong><small>Find important academic dates</small></span><span class="arrow">↗</span></button>
+            <button class="suggestion" data-question="What topics are covered in Unit III?" type="button"><span class="suggestion-icon learn">✧</span><span><strong>What topics are covered in Unit III?</strong><small>Explore your course syllabus</small></span><span class="arrow">↗</span></button>
+            <button class="suggestion" data-question="Explain RAG in simple terms." type="button"><span class="suggestion-icon idea">⌁</span><span><strong>Explain RAG in simple terms</strong><small>Get a student-friendly explanation</small></span><span class="arrow">↗</span></button>
+          </div>
+        </div>
+        <div class="conversation" id="conversation" aria-live="polite"></div>
+      </section>
+      <footer class="composer-area">
+        <form class="composer" id="chat-form"><textarea id="question" rows="1" maxlength="1200" placeholder="Ask about dates, deadlines, or your course…" aria-label="Your question"></textarea><div class="composer-tools"><span class="input-hint"><kbd>↵</kbd> to ask</span><div><button id="upload-button" class="attach-button" type="button" aria-label="Add a document" title="Add a document">＋</button><button class="send-button" type="submit" aria-label="Send question">↑</button></div></div></form>
+        <input id="file-picker" type="file" accept=".pdf,.csv,.md,.txt" hidden>
+        <p class="disclaimer">Campus Compass can make mistakes. Verify important dates with your institution.</p>
+      </footer>
+    </main>
+    <aside class="right-rail"><div class="rail-heading"><div><div class="eyebrow">YOUR SEMESTER</div><h2>At a glance</h2></div><button class="icon-button" aria-label="More options">···</button></div>
+      <div class="semester-card"><div class="semester-top"><span class="mini-cal">▦</span><span class="term-tag">2026—27</span></div><h3>Semester overview</h3><p>Keep the important things on your radar.</p><div class="progress-meta"><span>Semester progress</span><strong>—</strong></div><div class="progress-track"><span></span></div><div class="progress-bottom">Official dates not connected yet</div></div>
+      <div class="rail-section"><div class="rail-title"><h3>Coming up</h3><button id="all-dates" type="button">Ask about dates <span>↗</span></button></div><div class="empty-dates"><div class="empty-calendar">▣</div><strong>Your dates will live here</strong><p>Connect your official calendar to see the semester at a glance.</p></div></div>
+      <div class="rail-tip"><div class="tip-spark">✦</div><div><strong>Better answers start with better sources</strong><p>Upload an official PDF calendar to give your assistant the details it needs.</p><button id="rail-upload" type="button">Add your calendar <span>→</span></button></div></div>
+      <div class="rail-footer"><span>✳</span> Made for the way you learn.</div>
+    </aside>
+  </div>
+  <div class="toast" id="toast" role="status"></div>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>
