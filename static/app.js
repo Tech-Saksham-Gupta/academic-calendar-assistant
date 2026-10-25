@@ -203,6 +203,33 @@ function chooseFile() { filePicker.click(); }
 document.querySelector('#upload-button').addEventListener('click', chooseFile);
 document.querySelector('#add-source').addEventListener('click', chooseFile);
 document.querySelector('#rail-upload').addEventListener('click', chooseFile);
+const calendarMenuButton = document.querySelector('#calendar-menu-button');
+const calendarMenu = document.querySelector('#calendar-options');
+
+function closeCalendarMenu() {
+  calendarMenu.hidden = true;
+  calendarMenuButton.setAttribute('aria-expanded', 'false');
+}
+
+calendarMenuButton.addEventListener('click', () => {
+  calendarMenu.hidden = !calendarMenu.hidden;
+  calendarMenuButton.setAttribute('aria-expanded', String(!calendarMenu.hidden));
+});
+document.querySelector('#refresh-calendar').addEventListener('click', () => {
+  closeCalendarMenu();
+  loadCalendarPreview();
+  showToast('Calendar dates refreshed.');
+});
+document.querySelector('#upload-calendar-again').addEventListener('click', () => {
+  closeCalendarMenu();
+  chooseFile();
+});
+document.addEventListener('click', (event) => {
+  if (!event.target.closest('.rail-menu')) closeCalendarMenu();
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') closeCalendarMenu();
+});
 filePicker.addEventListener('change', async () => {
   const file = filePicker.files[0];
   if (!file) return;
