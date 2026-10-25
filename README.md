@@ -4,7 +4,7 @@ A polished, deployable RAG assistant for academic dates and course information. 
 
 ## Before deployment
 
-1. Each visitor can upload their own institution's official calendar through the app. Calendars are scoped to that visitor's browser workspace and are not shared with other visitors.
+1. Each visitor can upload their own institution's calendar through the app. Calendars are scoped to that visitor's browser workspace and are not shared with other visitors. Readable PDF and CSV event dates also populate the **Coming up** sidebar and calendar progress bar.
 2. Review `data/ai_syllabus.md`; it is starter knowledge transcribed from the syllabus image supplied for this project.
 3. Create a Gemini API key in Google AI Studio and add it as `GEMINI_API_KEY` in your deployment's environment settings. Never commit the key.
 
@@ -26,7 +26,7 @@ Open http://127.0.0.1:8000. A Gemini API key is required for chat answers.
 
 ## Add your own knowledge
 
-Upload `.txt`, `.md`, `.csv`, or text-based `.pdf` files from the app. Each browser receives a random, HttpOnly session cookie, and uploaded files and indexes are stored under a separate hashed folder for that browser. For CSV calendars, use columns such as `date,event,category,details,source`. Scanned PDFs need OCR before adding.
+Upload `.txt`, `.md`, `.csv`, or text-based `.pdf` files from the app. Each browser receives a random, HttpOnly session cookie, and uploaded files and indexes are stored under a separate hashed folder for that browser. The sidebar date preview reads dated rows from CSVs and common month-name date rows from PDFs; if a PDF is scanned, run OCR before uploading. For best CSV results, use columns such as `date,event,category,details,source`.
 
 This is anonymous browser-level separation, not a login system: a visitor's workspace is tied to that browser profile and does not follow them to another device. Clearing cookies creates a new workspace. Add account sign-in and managed storage if users need to recover their workspace across devices.
 
