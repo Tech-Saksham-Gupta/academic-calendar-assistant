@@ -92,12 +92,10 @@ filePicker.addEventListener('change', async () => {
   if (!file) return;
   const data = new FormData();
   data.append('file', file);
-  // Only the owner who configured the server token should upload documents.
-  const ownerToken = window.prompt('Enter the private document upload token:');
-  if (!ownerToken) return;
   showToast(`Adding ${file.name}…`);
   try {
-    const response = await fetch('/api/documents', { method: 'POST', headers: { 'X-Admin-Token': ownerToken }, body: data });
+    // The server reads the private browser cookie and saves this file in that user's space.
+    const response = await fetch('/api/documents', { method: 'POST', body: data });
     const result = await response.json();
     if (!response.ok) throw new Error(result.detail || 'Upload failed.');
     showToast(result.message);
