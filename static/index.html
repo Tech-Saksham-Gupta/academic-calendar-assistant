@@ -51,13 +51,53 @@
         <p class="disclaimer">Campus Compass can make mistakes. Verify important dates with your institution.</p>
       </footer>
     </main>
-    <aside class="right-rail"><div class="rail-heading"><div><div class="eyebrow">YOUR SEMESTER</div><h2>At a glance</h2></div><button class="icon-button" aria-label="More options">···</button></div>
-      <div class="semester-card"><div class="semester-top"><span class="mini-cal">▦</span><span class="term-tag">2026—27</span></div><h3>Semester overview</h3><p>Keep the important things on your radar.</p><div class="progress-meta"><span>Semester progress</span><strong>—</strong></div><div class="progress-track"><span></span></div><div class="progress-bottom">Official dates not connected yet</div></div>
-      <div class="rail-section"><div class="rail-title"><h3>Coming up</h3><button id="all-dates" type="button">Ask about dates <span>↗</span></button></div><div class="empty-dates"><div class="empty-calendar">▣</div><strong>Your dates will live here</strong><p>Connect your official calendar to see the semester at a glance.</p></div></div>
-      <div class="rail-tip"><div class="tip-spark">✦</div><div><strong>Your calendar stays in your workspace</strong><p>Upload a PDF or CSV to get answers based on your institution's dates.</p><button id="rail-upload" type="button">Add your calendar <span>→</span></button></div></div>
+
+    <aside class="right-rail">
+      <div class="rail-heading">
+        <div><div class="eyebrow">YOUR SEMESTER</div><h2>At a glance</h2></div>
+        <button class="icon-button" aria-label="More options">···</button>
+      </div>
+
+      <div class="semester-card">
+        <div class="semester-top">
+          <span class="mini-cal">▦</span>
+          <span class="term-tag" id="calendar-range">YOUR CALENDAR</span>
+        </div>
+        <h3>Calendar overview</h3>
+        <p>Dates from your uploaded institution calendar.</p>
+        <div class="progress-meta">
+          <span>Calendar progress</span>
+          <strong id="progress-label">—</strong>
+        </div>
+        <div class="progress-track"><span id="calendar-progress-value"></span></div>
+        <div class="progress-bottom" id="progress-caption">Upload a calendar to see your dates.</div>
+      </div>
+
+      <div class="rail-section">
+        <div class="rail-title">
+          <h3>Coming up</h3>
+          <button id="all-dates" type="button">Ask about dates <span>↗</span></button>
+        </div>
+        <div class="empty-dates" id="calendar-empty">
+          <div class="empty-calendar">▣</div>
+          <strong id="empty-calendar-title">Your dates will live here</strong>
+          <p id="empty-calendar-message">Upload your calendar to see upcoming dates here.</p>
+        </div>
+        <div class="upcoming-events" id="upcoming-events" aria-live="polite"></div>
+      </div>
+
+      <div class="rail-tip">
+        <div class="tip-spark">✦</div>
+        <div>
+          <strong>Your calendar stays in your workspace</strong>
+          <p>Upload a PDF or CSV to get answers based on your institution's dates.</p>
+          <button id="rail-upload" type="button">Add your calendar <span>→</span></button>
+        </div>
+      </div>
       <div class="rail-footer"><span>✳</span> Made for the way you learn.</div>
     </aside>
   </div>
+
   <div class="toast" id="toast" role="status"></div>
   <script src="/static/app.js" defer></script>
 </body>
