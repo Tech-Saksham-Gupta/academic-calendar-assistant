@@ -23,7 +23,7 @@ def _source_fallback(sources: list[dict]) -> str:
     if not sources:
         return ("Gemini is temporarily busy, and I couldn't find a matching passage in your uploaded "
                 "calendar or course notes. Please try again shortly, or check the source document directly.")
-    excerpts = "\n\n".join(f"From {item['source']}: {item['text']}" for item in sources[:3])
+    excerpts = "\n\n".join(item["text"] for item in sources[:3])
     return ("Gemini is temporarily busy, so here are the closest passages I found in your sources. "
             "Please verify the wording in the cited document.\n\n" + excerpts)
 
@@ -40,7 +40,7 @@ def answer_question(question: str, sources: list[dict]) -> str:
     prompt = f"""You are Campus Compass, a helpful academic calendar and course assistant.
 Use the source excerpts below for institution-specific dates, deadlines, policies, and course facts. Never invent those details.
 If no relevant excerpt is available, tell the student the uploaded sources do not contain that answer and suggest uploading the official calendar or contacting the academic office. For general learning questions, you may explain the concept, but label it as a general explanation rather than an institutional fact.
-Be concise and student-friendly. Cite claims with the source name in square brackets.
+Be concise and student-friendly. Do not add inline filename citations; the interface displays source files and page numbers separately below your answer.
 
 SOURCE EXCERPTS:
 {context}
