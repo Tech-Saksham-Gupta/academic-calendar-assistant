@@ -214,13 +214,25 @@ filePicker.addEventListener('change', async () => {
     const response = await fetch('/api/documents', { method: 'POST', body: data });
     const result = await response.json();
     if (!response.ok) throw new Error(result.detail || 'Upload failed.');
-    showToast(result.message);
+    document.querySelector('#upload-notice-title').textContent = result.calendar_events
+      ? 'Calendar uploaded successfully'
+      : 'File uploaded successfully';
+    document.querySelector('#upload-notice-message').textContent = result.calendar_events
+      ? `${result.calendar_events} dated events are ready in your Coming up panel.`
+      : result.message;
+    const notice = document.querySelector('#upload-notice');
+    notice.hidden = false;
+    notice.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    toast.classList.remove('show');
     loadCalendarPreview();
   } catch (error) {
     showToast(error.message);
   } finally {
     filePicker.value = '';
   }
+});
+document.querySelector('#dismiss-upload-notice').addEventListener('click', () => {
+  document.querySelector('#upload-notice').hidden = true;
 });
 document.querySelector('#calendar-nav').addEventListener('click', () => {
   input.value = 'What important dates are in the academic calendar?';
