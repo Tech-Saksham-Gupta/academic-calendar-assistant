@@ -12,6 +12,28 @@ function showToast(message) {
   window.setTimeout(() => toast.classList.remove('show'), 3200);
 }
 
+function renderAnswerText(container, text) {
+  // Render the small Markdown subset Gemini commonly uses without injecting HTML.
+  // Unknown markup is left as plain text, so model output cannot run scripts.
+  const lines = String(text).split(/\r?\n/);
+  lines.forEach((line, lineIndex) => {
+    if (lineIndex > 0) container.append(document.createElement('br'));
+    const cleaned = line.replace(/^\s*[-*]\s+/, '');
+    const pattern = /(\*\*[^*]+\*\*|\*[^*]+\*)/g;
+    let cursor = 0;
+    for (const match of cleaned.matchAll(pattern)) {
+      const index = match.index;
+      if (index > cursor) container.append(document.createTextNode(cleaned.slice(cursor, index)));
+      const isBold = match[0].startsWith('**');
+      const emphasis = document.createElement(isBold ? 'strong' : 'em');
+      emphasis.textContent = match[0].slice(isBold ? 2 : 1, isBold ? -2 : -1);
+      container.append(emphasis);
+      cursor = index + match[0].length;
+    }
+    if (cursor < cleaned.length) container.append(document.createTextNode(cleaned.slice(cursor)));
+  });
+}
+
 function addMessage(text, role, sources = []) {
   const row = document.createElement('article');
   row.className = `message ${role}`;
@@ -20,14 +42,24 @@ function addMessage(text, role, sources = []) {
   mark.textContent = role === 'user' ? 'S' : '✳';
   const bubble = document.createElement('div');
   bubble.className = 'bubble';
-  // textContent safely displays answers without interpreting model output as HTML.
-  bubble.textContent = text;
+  if (role === 'assistant') renderAnswerText(bubble, text);
+  else bubble.textContent = text;
   row.append(mark, bubble);
   conversation.append(row);
   if (sources.length) {
     const sourceRow = document.createElement('div');
     sourceRow.className = 'sources';
+    // Collapse multiple retrieved chunks from the same page into one citation chip.
+    const bestScore = Math.max(...sources.map((source) => Number(source.relevance) || 0));
+    const cutoff = Math.max(0.12, bestScore * 0.7);
+    const uniqueSources = new Map();
     sources.forEach((source) => {
+      if ((Number(source.relevance) || 0) < cutoff) return;
+      const key = `${source.name}|${source.page ?? ''}`;
+      const previous = uniqueSources.get(key);
+      if (!previous || source.relevance > previous.relevance) uniqueSources.set(key, source);
+    });
+    uniqueSources.forEach((source) => {
       const chip = document.createElement('span');
       chip.className = 'source-chip';
       chip.textContent = `${source.name}${source.page ? ` · p. ${source.page}` : ''}`;
