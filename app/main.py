@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from .config import STATIC_DIR, USER_DATA_DIR, DATA_DIR, MAX_UPLOAD_MB, GEMINI_API_KEY
 from .rag import KnowledgeBase
 from .gemini import answer_question
+from .documents import extract_calendar_events
 
 # Shared syllabus is indexed once. Each visitor with an upload gets a separate index.
 shared_knowledge = KnowledgeBase(index_file=DATA_DIR / "shared_index.json")
@@ -86,6 +87,15 @@ def health():
     """Simple service check used by Render; it never returns visitor information."""
     return {"status": "ok", "gemini_configured": bool(GEMINI_API_KEY), "indexed_passages": len(shared_knowledge.items), "index_error": index_error or None}
 
+@app.get("/api/calendar")
+def calendar_preview(request: Request, response: Response):
+    """Return only this browser's extracted calendar events for the sidebar preview."""
+    session_id = get_session_id(request, response)
+    _, upload_dir = user_directories(session_id)
+    events = extract_calendar_events(upload_dir)
+    dated = [event for event in events if event.get("start_date")]
+    return {"events": dated, "count": len(dated)}
+
 @app.post("/api/chat")
 def chat(payload: ChatRequest, request: Request, response: Response):
     """Retrieve from shared course notes and this visitor's private calendar only."""
@@ -131,7 +141,12 @@ async def upload_document(request: Request, response: Response, file: UploadFile
             kb = KnowledgeBase(user_upload_dir=upload_dir, index_file=user_root / "index.json")
             private_knowledge[cache_key] = kb
         count = kb.rebuild()
-        return {"message": f"Added {safe_name} to your private browser workspace ({count} passages indexed)."}
+        event_count = len(extract_calendar_events(upload_dir))
+        if event_count:
+            message = f"Your calendar uploaded successfully! I found {event_count} dated events for your Coming up panel."
+        else:
+            message = "Your file uploaded successfully, but I couldn't detect readable calendar dates for the Coming up panel. You can still ask questions about its contents."
+        return {"message": message, "indexed_passages": count, "calendar_events": event_count}
     except Exception as error:
         target.unlink(missing_ok=True)
         print(f"Private document indexing failed: {error}")
