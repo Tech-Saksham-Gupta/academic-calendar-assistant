@@ -4,10 +4,9 @@ A polished, deployable RAG assistant for academic dates and course information. 
 
 ## Before deployment
 
-1. Upload your institution's official calendar through the app after deployment. No institution dates are invented or pre-filled.
+1. Each visitor can upload their own institution's official calendar through the app. Calendars are scoped to that visitor's browser workspace and are not shared with other visitors.
 2. Review `data/ai_syllabus.md`; it is starter knowledge transcribed from the syllabus image supplied for this project.
 3. Create a Gemini API key in Google AI Studio and add it as `GEMINI_API_KEY` in your deployment's environment settings. Never commit the key.
-4. Set a long, random `ADMIN_UPLOAD_TOKEN` in deployment settings to authorize document uploads. Keep it private.
 
 ## Run locally
 
@@ -19,7 +18,7 @@ python -m venv .venv
 # macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
 copy .env.example .env  # Windows; use cp .env.example .env on macOS/Linux
-# Put your Gemini key and a private ADMIN_UPLOAD_TOKEN in .env, then:
+# Put your Gemini key in .env, then:
 uvicorn app.main:app --reload
 ```
 
@@ -27,7 +26,9 @@ Open http://127.0.0.1:8000. A Gemini API key is required for chat answers.
 
 ## Add your own knowledge
 
-Put `.txt`, `.md`, `.csv`, or text-based `.pdf` files in `data/`; restart the app to index them. Or upload the official calendar from the app using the private `ADMIN_UPLOAD_TOKEN` set in the server environment. For CSV calendars, use columns such as `date,event,category,details,source`. Scanned PDFs need OCR before adding.
+Upload `.txt`, `.md`, `.csv`, or text-based `.pdf` files from the app. Each browser receives a random, HttpOnly session cookie, and uploaded files and indexes are stored under a separate hashed folder for that browser. For CSV calendars, use columns such as `date,event,category,details,source`. Scanned PDFs need OCR before adding.
+
+This is anonymous browser-level separation, not a login system: a visitor's workspace is tied to that browser profile and does not follow them to another device. Clearing cookies creates a new workspace. Add account sign-in and managed storage if users need to recover their workspace across devices.
 
 Chat requests call Gemini even when retrieval finds no passages. In that case, Gemini is instructed to say the uploaded documents do not contain the answer rather than inventing an institutional date. `/api/health` reports whether a key is configured and whether indexing reported an error.
 
@@ -35,11 +36,11 @@ Chat requests call Gemini even when retrieval finds no passages. In that case, G
 
 1. Push this project folder to a GitHub repository. If it is inside a larger repository, set Render's Root Directory to `academic-calendar-assistant`.
 2. In Render, choose **New → Blueprint**, connect the GitHub repository, and select this project's `render.yaml`.
-3. In the Blueprint environment form, enter your `GEMINI_API_KEY` and a long private `ADMIN_UPLOAD_TOKEN`. Keep both secret. The Gemini key stays on the server; the upload token authorizes calendar/document uploads.
+3. In the Blueprint environment form, enter your `GEMINI_API_KEY`. Keep it secret; it stays on the server. No upload password is required because visitor uploads are separated by browser session.
 4. Create the service and wait for the first deploy to finish. Open the Render URL and check `/api/health`; it should show `gemini_configured: true` and a nonzero `indexed_passages` count.
-5. On the site, select **Add a source**, choose your official calendar as a text-based PDF or CSV, then enter the same `ADMIN_UPLOAD_TOKEN` when prompted. For CSV, use columns such as `date,event,category,details,source`.
+5. Each visitor can select **Add a source** and upload their own calendar as a text-based PDF or CSV. For CSV, use columns such as `date,event,category,details,source`.
 
-The Render disk keeps uploaded files across deploys. The small vector index is rebuilt from the bundled syllabus and uploaded files when needed. Scanned PDFs need OCR before uploading.
+This project is configured for Render's free web service. Free services do not have persistent disks, so uploaded calendars and browser workspaces can be lost when the service restarts or redeploys; visitors may need to upload their calendar again. The vector index is rebuilt from the bundled syllabus and that visitor's uploaded files when needed. Scanned PDFs need OCR before uploading.
 
 ## Project map
 
