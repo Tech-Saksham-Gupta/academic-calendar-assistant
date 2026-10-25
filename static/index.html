@@ -36,11 +36,17 @@
       <div class="nav-label sources-label">KNOWLEDGE</div>
       <div class="source-item">
         <span class="file-icon purple">▤</span>
-        <div><strong>AI course syllabus</strong><span>Starter course knowledge</span></div>
+        <div>
+          <strong>AI course syllabus</strong>
+          <span>Starter course knowledge</span>
+        </div>
       </div>
       <div class="source-item">
         <span class="file-icon green">▦</span>
-        <div><strong>Academic calendar</strong><span>Upload your institution calendar</span></div>
+        <div>
+          <strong>Academic calendar</strong>
+          <span>Upload your institution calendar</span>
+        </div>
       </div>
 
       <div class="sidebar-bottom">
@@ -52,7 +58,10 @@
         </div>
         <div class="profile">
           <div class="avatar">S</div>
-          <div><strong>Student</strong><span>Personal workspace</span></div>
+          <div>
+            <strong>Student</strong>
+            <span>Personal workspace</span>
+          </div>
           <span class="more">···</span>
         </div>
       </div>
@@ -67,7 +76,6 @@
         </div>
       </header>
 
-      <!-- This large confirmation appears after a successful upload. -->
       <div class="upload-notice" id="upload-notice" role="status" aria-live="polite" hidden>
         <div class="upload-notice-icon" aria-hidden="true">✓</div>
         <div class="upload-notice-copy">
@@ -91,19 +99,42 @@
 
           <div class="suggestions-label">A FEW THINGS YOU CAN ASK</div>
           <div class="suggestions">
-            <button class="suggestion" data-question="When does the semester begin?" type="button">
+            <button
+              class="suggestion"
+              data-question="When does my next semester begin?"
+              type="button"
+            >
               <span class="suggestion-icon date">▣</span>
-              <span><strong>When does the semester begin?</strong><small>Find important academic dates</small></span>
+              <span>
+                <strong>When does my next semester begin?</strong>
+                <small>Find the next start date in your calendar</small>
+              </span>
               <span class="arrow">↗</span>
             </button>
-            <button class="suggestion" data-question="What topics are covered in Unit III?" type="button">
+
+            <button
+              class="suggestion"
+              data-question="What is the next important deadline?"
+              type="button"
+            >
               <span class="suggestion-icon learn">✧</span>
-              <span><strong>What topics are covered in Unit III?</strong><small>Explore your course syllabus</small></span>
+              <span>
+                <strong>What is my next important deadline?</strong>
+                <small>Check upcoming academic deadlines</small>
+              </span>
               <span class="arrow">↗</span>
             </button>
-            <button class="suggestion" data-question="Explain RAG in simple terms." type="button">
+
+            <button
+              class="suggestion"
+              data-question="When are my final exams scheduled?"
+              type="button"
+            >
               <span class="suggestion-icon idea">⌁</span>
-              <span><strong>Explain RAG in simple terms</strong><small>Get a student-friendly explanation</small></span>
+              <span>
+                <strong>When are my final exams scheduled?</strong>
+                <small>Find exam dates in your calendar</small>
+              </span>
               <span class="arrow">↗</span>
             </button>
           </div>
@@ -124,7 +155,13 @@
           <div class="composer-tools">
             <span class="input-hint"><kbd>↵</kbd> to ask</span>
             <div>
-              <button id="upload-button" class="attach-button" type="button" aria-label="Add a document" title="Add a document">＋</button>
+              <button
+                id="upload-button"
+                class="attach-button"
+                type="button"
+                aria-label="Add a document"
+                title="Add a document"
+              >＋</button>
               <button class="send-button" type="submit" aria-label="Send question">↑</button>
             </div>
           </div>
@@ -154,7 +191,9 @@
           <span>Calendar progress</span>
           <strong id="progress-label">—</strong>
         </div>
-        <div class="progress-track"><span id="calendar-progress-value"></span></div>
+        <div class="progress-track">
+          <span id="calendar-progress-value"></span>
+        </div>
         <div class="progress-bottom" id="progress-caption">Upload a calendar to see your dates.</div>
       </div>
 
