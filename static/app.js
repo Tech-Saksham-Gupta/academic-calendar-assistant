@@ -99,7 +99,9 @@ function showToast(message) {
 function renderAnswerText(container, text) {
   // Render the small Markdown subset Gemini commonly uses without injecting HTML.
   // Unknown markup is left as plain text, so model output cannot run scripts.
-  const lines = String(text).split(/\r?\n/);
+  // Source chips below the answer already show document names and page numbers.
+  const cleanText = String(text).replace(/\s*\[[^\]]+\.(?:pdf|md|txt|csv)\]/gi, '');
+  const lines = cleanText.split(/\r?\n/);
   lines.forEach((line, lineIndex) => {
     if (lineIndex > 0) container.append(document.createElement('br'));
     const cleaned = line.replace(/^\s*[-*]\s+/, '');
