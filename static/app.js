@@ -5,6 +5,90 @@ const conversation = document.querySelector('#conversation');
 const welcome = document.querySelector('#welcome');
 const filePicker = document.querySelector('#file-picker');
 const toast = document.querySelector('#toast');
+const dateFormatter = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
+
+function parseLocalDate(isoDate) {
+  const [year, month, day] = isoDate.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function formatDateRange(startIso, endIso) {
+  const start = parseLocalDate(startIso);
+  const end = parseLocalDate(endIso);
+  return startIso === endIso ? dateFormatter.format(start) : `${dateFormatter.format(start)} – ${dateFormatter.format(end)}`;
+}
+
+async function loadCalendarPreview() {
+  const emptyCard = document.querySelector('#calendar-empty');
+  const eventList = document.querySelector('#upcoming-events');
+  try {
+    const response = await fetch('/api/calendar');
+    if (!response.ok) throw new Error('Could not load calendar dates.');
+    const data = await response.json();
+    const events = data.events || [];
+    eventList.replaceChildren();
+    if (!events.length) {
+      emptyCard.hidden = false;
+      document.querySelector('#empty-calendar-title').textContent = 'Your dates will live here';
+      document.querySelector('#empty-calendar-message').textContent = 'Upload a calendar with readable event dates to see what is coming up.';
+      document.querySelector('#calendar-range').textContent = 'YOUR CALENDAR';
+      document.querySelector('#progress-label').textContent = '—';
+      document.querySelector('#calendar-progress-value').style.width = '0%';
+      document.querySelector('#progress-caption').textContent = 'Upload a calendar to see your dates.';
+      return;
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const upcoming = events.filter((event) => parseLocalDate(event.end_date) >= today).slice(0, 6);
+    const firstDate = parseLocalDate(events[0].start_date);
+    const lastIso = events.reduce((latest, event) => event.end_date > latest ? event.end_date : latest, events[0].end_date);
+    const lastDate = parseLocalDate(lastIso);
+    const rangeYears = firstDate.getFullYear() === lastDate.getFullYear()
+      ? String(firstDate.getFullYear())
+      : `${firstDate.getFullYear()}–${String(lastDate.getFullYear()).slice(-2)}`;
+    document.querySelector('#calendar-range').textContent = rangeYears;
+
+    const totalDuration = lastDate.getTime() - firstDate.getTime();
+    const elapsed = today.getTime() - firstDate.getTime();
+    const percent = totalDuration > 0 ? Math.max(0, Math.min(100, Math.round((elapsed / totalDuration) * 100))) : 100;
+    document.querySelector('#progress-label').textContent = `${percent}%`;
+    document.querySelector('#calendar-progress-value').style.width = `${percent}%`;
+    document.querySelector('#progress-caption').textContent = `${events.length} dated events in your calendar`;
+
+    if (!upcoming.length) {
+      emptyCard.hidden = false;
+      document.querySelector('#empty-calendar-title').textContent = 'You’re all caught up';
+      document.querySelector('#empty-calendar-message').textContent = 'There are no future dates in this calendar.';
+      return;
+    }
+
+    emptyCard.hidden = true;
+    upcoming.forEach((event) => {
+      const row = document.createElement('article');
+      row.className = 'upcoming-event';
+      const dateBadge = document.createElement('div');
+      dateBadge.className = 'event-date';
+      dateBadge.textContent = formatDateRange(event.start_date, event.end_date);
+      const info = document.createElement('div');
+      info.className = 'event-info';
+      const title = document.createElement('strong');
+      title.textContent = event.title;
+      info.append(title);
+      if (event.term && event.term !== 'Academic calendar') {
+        const term = document.createElement('span');
+        term.textContent = event.term;
+        info.append(term);
+      }
+      row.append(dateBadge, info);
+      eventList.append(row);
+    });
+  } catch (error) {
+    emptyCard.hidden = false;
+    document.querySelector('#empty-calendar-title').textContent = 'Calendar preview unavailable';
+    document.querySelector('#empty-calendar-message').textContent = error.message;
+  }
+}
 
 function showToast(message) {
   toast.textContent = message;
@@ -131,6 +215,7 @@ filePicker.addEventListener('change', async () => {
     const result = await response.json();
     if (!response.ok) throw new Error(result.detail || 'Upload failed.');
     showToast(result.message);
+    loadCalendarPreview();
   } catch (error) {
     showToast(error.message);
   } finally {
@@ -153,3 +238,6 @@ fetch('/api/health').then((response) => response.json()).then((status) => {
   else if (status.index_error) statusText.textContent = 'Knowledge indexing issue';
   else statusText.textContent = 'Gemini key configured';
 }).catch(() => {});
+
+// Load this browser's private calendar preview when the page opens.
+loadCalendarPreview();
