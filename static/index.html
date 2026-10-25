@@ -99,11 +99,7 @@
 
           <div class="suggestions-label">A FEW THINGS YOU CAN ASK</div>
           <div class="suggestions">
-            <button
-              class="suggestion"
-              data-question="When does my next semester begin?"
-              type="button"
-            >
+            <button class="suggestion" data-question="When does my next semester begin?" type="button">
               <span class="suggestion-icon date">▣</span>
               <span>
                 <strong>When does my next semester begin?</strong>
@@ -112,11 +108,7 @@
               <span class="arrow">↗</span>
             </button>
 
-            <button
-              class="suggestion"
-              data-question="What is the next important deadline?"
-              type="button"
-            >
+            <button class="suggestion" data-question="What is the next important deadline?" type="button">
               <span class="suggestion-icon learn">✧</span>
               <span>
                 <strong>What is my next important deadline?</strong>
@@ -125,11 +117,7 @@
               <span class="arrow">↗</span>
             </button>
 
-            <button
-              class="suggestion"
-              data-question="When are my final exams scheduled?"
-              type="button"
-            >
+            <button class="suggestion" data-question="When are my final exams scheduled?" type="button">
               <span class="suggestion-icon idea">⌁</span>
               <span>
                 <strong>When are my final exams scheduled?</strong>
@@ -177,7 +165,21 @@
           <div class="eyebrow">YOUR SEMESTER</div>
           <h2>At a glance</h2>
         </div>
-        <button class="icon-button" aria-label="More options">···</button>
+        <div class="rail-menu">
+          <button
+            class="icon-button"
+            id="calendar-menu-button"
+            type="button"
+            aria-label="Calendar options"
+            aria-haspopup="menu"
+            aria-expanded="false"
+            aria-controls="calendar-options"
+          >···</button>
+          <div class="rail-menu-list" id="calendar-options" role="menu" hidden>
+            <button type="button" id="refresh-calendar" role="menuitem">↻ <span>Refresh dates</span></button>
+            <button type="button" id="upload-calendar-again" role="menuitem">＋ <span>Upload another calendar</span></button>
+          </div>
+        </div>
       </div>
 
       <div class="semester-card">
