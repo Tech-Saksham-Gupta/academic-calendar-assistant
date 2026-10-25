@@ -104,7 +104,7 @@ def chat(payload: ChatRequest, request: Request, response: Response):
         print(f"Chat request failed: {error}")
         if "GEMINI_API_KEY is missing" in str(error):
             raise HTTPException(status_code=503, detail=str(error))
-        raise HTTPException(status_code=502, detail=f"Gemini request failed: {error}")
+        raise HTTPException(status_code=502, detail="The assistant could not complete this request. Please try again in a moment.")
 
 @app.post("/api/documents")
 async def upload_document(request: Request, response: Response, file: UploadFile = File(...)):
