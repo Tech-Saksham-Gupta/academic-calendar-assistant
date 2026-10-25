@@ -2,10 +2,10 @@
 import csv
 from pathlib import Path
 from pypdf import PdfReader
-from .config import DATA_DIR, UPLOAD_DIR
+from .config import DATA_DIR
 
-def load_documents() -> list[dict]:
-    """Load calendar rows and supported files from the knowledge folders."""
+def load_documents(user_upload_dir: Path | None = None) -> list[dict]:
+    """Load shared course notes plus files from only the current browser user's folder."""
     documents = []
     calendar = DATA_DIR / "academic_calendar.csv"
     if calendar.exists():
@@ -15,8 +15,11 @@ def load_documents() -> list[dict]:
                 if text:
                     documents.append({"text": text, "source": "Academic calendar", "page": None})
 
-    # Include both built-in course notes and documents added by the user.
-    for folder in (DATA_DIR, UPLOAD_DIR):
+    # The course syllabus is shared; uploaded files are scoped to one user folder.
+    folders = [DATA_DIR]
+    if user_upload_dir is not None:
+        folders.append(user_upload_dir)
+    for folder in folders:
         if not folder.exists():
             continue
         for path in folder.iterdir():
