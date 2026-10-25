@@ -1,9 +1,14 @@
 """Create concise, source-grounded answers with Google's Gemini API."""
 import time
 from google import genai
+from google.genai import types
 from .config import GEMINI_API_KEY, GEMINI_MODEL
 
-BACKUP_MODELS = ("gemini-3.6-flash", "gemini-3.5-flash-lite")
+BACKUP_MODELS = ("gemini-3.6-flash", "gemini-3.8-flash")
+
+def _thinking_level(model: str) -> str:
+    """Use the lightest supported reasoning level for short calendar answers."""
+    return "minimal" if model in {"gemini-3.5-flash-lite", "gemini-3.6-flash"} else "low"
 
 def _is_temporary_error(error: Exception) -> bool:
     """Recognize temporary overload, quota, or server errors from Gemini."""
@@ -46,18 +51,26 @@ ANSWER:"""
     # Try the configured model first, then stable backup models for service overload.
     models = list(dict.fromkeys((GEMINI_MODEL, *BACKUP_MODELS)))
     last_error = None
-    for model in models:
-        for attempt in range(3):
+    for model_index, model in enumerate(models):
+        # One short retry for the primary model; move to backups promptly on overload.
+        attempts = 2 if model_index == 0 else 1
+        for attempt in range(attempts):
             try:
-                response = client.models.generate_content(model=model, contents=prompt)
+                response = client.models.generate_content(
+                    model=model,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        thinking_config=types.ThinkingConfig(thinking_level=_thinking_level(model))
+                    ),
+                )
                 if response.text:
                     return response.text
                 raise RuntimeError(f"Gemini model {model} returned an empty response.")
             except Exception as error:
                 last_error = error
                 # Short exponential waits give a busy primary endpoint a chance to recover.
-                if _is_temporary_error(error) and attempt < 2:
-                    time.sleep(0.8 * (2 ** attempt))
+                if _is_temporary_error(error) and attempt < attempts - 1:
+                    time.sleep(0.4)
                     continue
                 # A model/key configuration error is unlikely to improve by retrying.
                 if not _is_temporary_error(error):
