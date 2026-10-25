@@ -1,6 +1,26 @@
 """Create concise, source-grounded answers with Google's Gemini API."""
+import time
 from google import genai
 from .config import GEMINI_API_KEY, GEMINI_MODEL
+
+BACKUP_MODELS = ("gemini-3.6-flash", "gemini-3.5-flash-lite")
+
+def _is_temporary_error(error: Exception) -> bool:
+    """Recognize temporary overload, quota, or server errors from Gemini."""
+    message = str(error).lower()
+    return any(marker in message for marker in (
+        "503", "unavailable", "429", "resource_exhausted", "500", "502", "504",
+        "internal error", "high demand", "try again later",
+    ))
+
+def _source_fallback(sources: list[dict]) -> str:
+    """Show useful retrieved facts if all Gemini models are temporarily unavailable."""
+    if not sources:
+        return ("Gemini is temporarily busy, and I couldn't find a matching passage in your uploaded "
+                "calendar or course notes. Please try again shortly, or check the source document directly.")
+    excerpts = "\n\n".join(f"From {item['source']}: {item['text']}" for item in sources[:3])
+    return ("Gemini is temporarily busy, so here are the closest passages I found in your sources. "
+            "Please verify the wording in the cited document.\n\n" + excerpts)
 
 def answer_question(question: str, sources: list[dict]) -> str:
     """Ask Gemini to answer only from retrieved context and admit uncertainty."""
@@ -23,7 +43,25 @@ SOURCE EXCERPTS:
 STUDENT QUESTION: {question}
 ANSWER:"""
     client = genai.Client(api_key=GEMINI_API_KEY)
-    response = client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
-    if not response.text:
-        raise RuntimeError("Gemini returned an empty response. Check the model setting and API key access.")
-    return response.text
+    # Try the configured model first, then stable backup models for service overload.
+    models = list(dict.fromkeys((GEMINI_MODEL, *BACKUP_MODELS)))
+    last_error = None
+    for model in models:
+        for attempt in range(3):
+            try:
+                response = client.models.generate_content(model=model, contents=prompt)
+                if response.text:
+                    return response.text
+                raise RuntimeError(f"Gemini model {model} returned an empty response.")
+            except Exception as error:
+                last_error = error
+                # Short exponential waits give a busy primary endpoint a chance to recover.
+                if _is_temporary_error(error) and attempt < 2:
+                    time.sleep(0.8 * (2 ** attempt))
+                    continue
+                # A model/key configuration error is unlikely to improve by retrying.
+                if not _is_temporary_error(error):
+                    raise RuntimeError(f"Gemini could not answer with model {model}: {error}") from error
+                break
+    print(f"All Gemini answer models are temporarily unavailable: {last_error}")
+    return _source_fallback(sources)
