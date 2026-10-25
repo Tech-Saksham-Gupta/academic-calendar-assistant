@@ -1,6 +1,7 @@
 """A small, transparent RAG pipeline with persisted Gemini text embeddings."""
 import json
 import math
+import re
 from google import genai
 from .config import GEMINI_API_KEY, EMBEDDING_MODEL, INDEX_FILE, TOP_K
 from .documents import load_documents
@@ -38,7 +39,12 @@ class KnowledgeBase:
             return len(self.items)
         fresh = []
         for doc in docs:
-            vector = self._embed(doc["text"])
+            try:
+                vector = self._embed(doc["text"])
+            except Exception as error:
+                # Keep documents usable with keyword search if Gemini embeddings are busy.
+                print(f"Embedding unavailable for {doc['source']}; using keyword search: {error}")
+                vector = []
             fresh.append({**doc, "embedding": vector})
         self.items = fresh
         self.index_file.parent.mkdir(parents=True, exist_ok=True)
@@ -53,12 +59,23 @@ class KnowledgeBase:
         """Return relevant chunks by cosine similarity, or term overlap without a key."""
         if not self.items:
             return []
+        terms = set(re.findall(r"[\w'-]+", query.lower()))
+        query_vector = None
         if self.client:
-            query_vector = self._embed(query)
-            ranked = [(self._cosine(query_vector, item.get("embedding", [])), item) for item in self.items]
-        else:
-            terms = set(query.lower().split())
-            ranked = [(len(terms & set(item["text"].lower().split())) / max(len(terms), 1), item) for item in self.items]
+            try:
+                query_vector = self._embed(query)
+            except Exception as error:
+                # A temporary embedding outage should not stop the assistant answering.
+                print(f"Query embedding unavailable; using keyword search: {error}")
+        ranked = []
+        for item in self.items:
+            vector = item.get("embedding", [])
+            if query_vector and vector:
+                score = self._cosine(query_vector, vector)
+            else:
+                item_terms = set(re.findall(r"[\w'-]+", item["text"].lower()))
+                score = len(terms & item_terms) / max(len(terms), 1)
+            ranked.append((score, item))
         ranked.sort(key=lambda pair: pair[0], reverse=True)
         return [{**item, "score": round(score, 3)} for score, item in ranked[:limit] if score > 0]
 
