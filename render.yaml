@@ -2,12 +2,8 @@ services:
   - type: web
     name: campus-compass
     runtime: docker
-    plan: starter
+    plan: free
     healthCheckPath: /api/health
-    disk:
-      name: campus-compass-data
-      mountPath: /app/data/uploads
-      sizeGB: 1
     envVars:
       - key: GEMINI_API_KEY
         sync: false
