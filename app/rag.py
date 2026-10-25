@@ -6,6 +6,8 @@ from google import genai
 from .config import GEMINI_API_KEY, EMBEDDING_MODEL, INDEX_FILE, TOP_K
 from .documents import load_documents
 
+STOP_WORDS = {"a", "an", "and", "are", "do", "does", "for", "from", "how", "i", "in", "is", "it", "me", "my", "of", "on", "the", "to", "was", "what", "when", "where", "which", "who", "will", "with", "your"}
+
 class KnowledgeBase:
     """Index source passages, retrieve the closest passages, and cite them."""
     def __init__(self, user_upload_dir=None, index_file=INDEX_FILE):
@@ -59,23 +61,31 @@ class KnowledgeBase:
         """Return relevant chunks by cosine similarity, or term overlap without a key."""
         if not self.items:
             return []
-        terms = set(re.findall(r"[\w'-]+", query.lower()))
-        query_vector = None
-        if self.client:
+        terms = set(re.findall(r"[\w'-]+", query.lower())) - STOP_WORDS
+        # Calendar questions usually contain the exact event words. Use local search
+        # for clear matches so a separate embedding API request does not slow the chat.
+        lexical_ranked = []
+        for item in self.items:
+            item_terms = set(re.findall(r"[\w'-]+", item["text"].lower()))
+            score = len(terms & item_terms) / max(len(terms), 1)
+            lexical_ranked.append((score, item))
+        lexical_ranked.sort(key=lambda pair: pair[0], reverse=True)
+        if not self.client or (lexical_ranked and lexical_ranked[0][0] >= 0.25):
+            ranked = lexical_ranked
+        else:
+            ranked = []
             try:
                 query_vector = self._embed(query)
+                for item in self.items:
+                    vector = item.get("embedding", [])
+                    score = self._cosine(query_vector, vector) if vector else next(
+                        (lexical_score for lexical_score, candidate in lexical_ranked if candidate is item), 0.0
+                    )
+                    ranked.append((score, item))
             except Exception as error:
                 # A temporary embedding outage should not stop the assistant answering.
                 print(f"Query embedding unavailable; using keyword search: {error}")
-        ranked = []
-        for item in self.items:
-            vector = item.get("embedding", [])
-            if query_vector and vector:
-                score = self._cosine(query_vector, vector)
-            else:
-                item_terms = set(re.findall(r"[\w'-]+", item["text"].lower()))
-                score = len(terms & item_terms) / max(len(terms), 1)
-            ranked.append((score, item))
+                ranked = lexical_ranked
         ranked.sort(key=lambda pair: pair[0], reverse=True)
         return [{**item, "score": round(score, 3)} for score, item in ranked[:limit] if score > 0]
 
