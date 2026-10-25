@@ -30,14 +30,14 @@ Upload `.txt`, `.md`, `.csv`, or text-based `.pdf` files from the app. Each brow
 
 This is anonymous browser-level separation, not a login system: a visitor's workspace is tied to that browser profile and does not follow them to another device. Clearing cookies creates a new workspace. Add account sign-in and managed storage if users need to recover their workspace across devices.
 
-Chat requests call Gemini even when retrieval finds no passages. In that case, Gemini is instructed to say the uploaded documents do not contain the answer rather than inventing an institutional date. `/api/health` reports whether a key is configured and whether indexing reported an error.
+Chat requests call Gemini even when retrieval finds no passages. In that case, Gemini is instructed to say the uploaded documents do not contain the answer rather than inventing an institutional date. The answer generator briefly retries temporary overloads and then tries Gemini 3.6 Flash and 3.5 Flash-Lite; if all are busy, it shows the best retrieved passages instead of a raw error. Retrieval falls back to keyword matching if the embedding endpoint is temporarily unavailable. `/api/health` reports whether a key is configured and whether indexing reported an error.
 
 ## Deploy on Render
 
 1. Push this project folder to a GitHub repository. If it is inside a larger repository, set Render's Root Directory to `academic-calendar-assistant`.
 2. In Render, choose **New → Blueprint**, connect the GitHub repository, and select this project's `render.yaml`.
 3. In the Blueprint environment form, enter your `GEMINI_API_KEY`. Keep it secret; it stays on the server. No upload password is required because visitor uploads are separated by browser session.
-4. Create the service and wait for the first deploy to finish. Open the Render URL and check `/api/health`; it should show `gemini_configured: true` and a nonzero `indexed_passages` count.
+4. Create the service and wait for the first deploy to finish. Open the Render URL and check `/api/health`; it should show `gemini_configured: true` and a nonzero `indexed_passages` count. The configured generation model is `gemini-3.8-flash`.
 5. Each visitor can select **Add a source** and upload their own calendar as a text-based PDF or CSV. For CSV, use columns such as `date,event,category,details,source`.
 
 This project is configured for Render's free web service. Free services do not have persistent disks, so uploaded calendars and browser workspaces can be lost when the service restarts or redeploys; visitors may need to upload their calendar again. The vector index is rebuilt from the bundled syllabus and that visitor's uploaded files when needed. Scanned PDFs need OCR before uploading.
