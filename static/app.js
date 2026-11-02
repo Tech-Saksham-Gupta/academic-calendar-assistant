@@ -239,17 +239,60 @@ async function ask(question) {
   input.style.height = 'auto';
   const pending = document.createElement('article');
   pending.className = 'message';
-  pending.innerHTML = '<div class="message-mark">✳</div><div class="bubble typing">Looking through your sources…</div>';
+  pending.innerHTML = '<div class="message-mark">✳</div><div class="bubble typing">Connecting to Campus Compass…</div>';
   conversation.append(pending);
   try {
-    const response = await fetch('/api/chat', {
+    const response = await fetch('/api/chat/stream', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ question: cleanQuestion }),
     });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.detail || 'Please try again.');
+
+    if (!response.ok) {
+      const result = await response.json();
+      throw new Error(result.detail || 'Please try again.');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    const bubble = pending.querySelector('.bubble');
+    let buffer = '';
+    let answer = '';
+    let sources = [];
+    let streamError = '';
+
+    // Read each newline-delimited event while the server is still generating.
+    function processEventLine(line) {
+      if (!line.trim()) return;
+      const update = JSON.parse(line);
+      if (update.type === 'status') {
+        bubble.textContent = update.message;
+        bubble.classList.add('typing');
+      } else if (update.type === 'sources') {
+        sources = update.sources || [];
+      } else if (update.type === 'token') {
+        answer += update.text || '';
+        bubble.textContent = answer;
+        bubble.classList.remove('typing');
+        conversation.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      } else if (update.type === 'error') {
+        streamError = update.message || 'Please try again.';
+      }
+    }
+
+    while (true) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      lines.forEach(processEventLine);
+      if (done) break;
+    }
+    if (buffer.trim()) processEventLine(buffer);
+    if (streamError) throw new Error(streamError);
+    if (!answer) throw new Error('The assistant returned an empty response. Please try again.');
+
     pending.remove();
-    addMessage(result.answer, 'assistant', result.sources || []);
+    addMessage(answer, 'assistant', sources);
   } catch (error) {
     pending.remove();
     addMessage(`I couldn't complete that request. ${error.message}`, 'assistant');
