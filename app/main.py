@@ -7,6 +7,7 @@ import re
 import secrets
 import string
 from time import perf_counter
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
@@ -39,8 +40,14 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Campus Compass", description="Private, RAG academic calendar assistant", version="1.1.0", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
+class ChatTurn(BaseModel):
+    """One recent user or assistant message, used to keep follow-up questions coherent."""
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=1200)
+
 class ChatRequest(BaseModel):
     question: str = Field(min_length=2, max_length=1200)
+    history: list[ChatTurn] = Field(default_factory=list, max_length=10)
 
 def get_session_id(request: Request, response: Response) -> str:
     """Create an unguessable browser session cookie when a visitor first arrives."""
@@ -89,7 +96,7 @@ def is_study_plan_question(question: str) -> bool:
     )
     return any(phrase in text for phrase in planning_phrases)
 
-def study_plan_has_exam_details(question: str) -> bool:
+def study_plan_has_exam_details(question: str, history: list[dict] | None = None) -> bool:
     """Require a usable subject and date before retrieving citations for a plan."""
     text = question.casefold()
     month = r"jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?"
@@ -104,28 +111,73 @@ def study_plan_has_exam_details(question: str) -> bool:
         text,
     )
     subject = subject_match.group(1).strip() if subject_match else ""
-    has_subject = bool(subject and subject not in {"final", "upcoming", "semester", "the"})
+    # Short course names are often sent as a separate reply, for example "DSA".
+    acronyms = set(re.findall(r"\b[A-Z][A-Z0-9]{1,5}\b", question))
+    month_abbreviations = {"JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "SEPT", "OCT", "NOV", "DEC"}
+    has_subject = bool(
+        (subject and subject not in {"final", "upcoming", "semester", "the"})
+        or (acronyms - month_abbreviations)
+    )
+
+    # If the assistant previously asked for a subject, treat the student's next
+    # descriptive reply as that subject (for example, "Data Structures").
+    if not has_subject and history:
+        ignored_words = {
+            "i", "a", "an", "the", "my", "me", "is", "am", "are", "have", "for", "on",
+            "and", "or", "please", "subject", "exam", "test", "date", "hours", "hour", "hrs",
+            "daily", "study", "time", "minutes", "mins", "min", "per", "day",
+            "jan", "january", "feb", "february", "mar", "march", "apr", "april", "may",
+            "jun", "june", "jul", "july", "aug", "august", "sep", "sept", "september",
+            "oct", "october", "nov", "november", "dec", "december",
+        }
+        for index, turn in enumerate(history):
+            if turn["role"] != "assistant" or "subject" not in turn["content"].casefold():
+                continue
+            next_answer = next((item["content"] for item in history[index + 1:] if item["role"] == "user"), "")
+            # Remove dates and time amounts; any remaining meaningful words likely
+            # name the subject requested by the assistant.
+            without_date = re.sub(
+                rf"\b(?:{month})\s+\d{{1,2}}(?:st|nd|rd|th)?(?:,?\s+20\d{{2}})?\b"
+                rf"|\b\d{{1,2}}(?:st|nd|rd|th)?\s+(?:{month})\b"
+                rf"|\b\d+(?:\.\d+)?\s*(?:hours?|hrs?|h|minutes?|mins?)\b",
+                " ", next_answer.casefold(),
+            )
+            remaining = [word for word in re.findall(r"[a-z]+", without_date) if word not in ignored_words]
+            if remaining:
+                has_subject = True
+                break
     return has_date and has_subject
 
-def answer_context(question: str, session_id: str) -> tuple[list[dict], list[dict] | None]:
+def answer_context(question: str, session_id: str, history: list[dict] | None = None) -> tuple[list[dict], list[dict] | None]:
     """Retrieve evidence, avoiding irrelevant citations for an incomplete study-plan request."""
-    planning = is_study_plan_question(question)
-    if planning and not study_plan_has_exam_details(question):
+    history = history or []
+    # Use the recent conversation to resolve short follow-ups like "DSA, 16 Dec".
+    previous_user_messages = [turn["content"] for turn in history if turn["role"] == "user"]
+    conversation_query = " ".join([*previous_user_messages, question])
+    planning = is_study_plan_question(conversation_query)
+    if planning and not study_plan_has_exam_details(conversation_query, history):
         # The assistant should ask for the missing subject/date first, without
         # attaching unrelated retrieved pages to a clarification message.
         return [], None
 
-    sources = knowledge_for(session_id).retrieve(question)
+    sources = knowledge_for(session_id).retrieve(conversation_query)
     calendar_events = None
     if planning:
         # The shared AI syllabus is not evidence for a calendar-grounded plan unless
         # the student explicitly says the exam is for that course.
-        mentions_ai_course = bool(re.search(r"\b(?:ai|artificial intelligence)\b", question, re.IGNORECASE))
+        mentions_ai_course = bool(re.search(r"\b(?:ai|artificial intelligence)\b", conversation_query, re.IGNORECASE))
         if not mentions_ai_course:
             sources = [source for source in sources if source["source"].casefold() != "ai_syllabus.md"]
         _, upload_dir = user_directories(session_id)
         calendar_events = extract_calendar_events(upload_dir)
     return sources, calendar_events
+
+def visible_citations(sources: list[dict]) -> list[dict]:
+    """Hide the bundled starter syllabus from citation chips in every reply."""
+    return [
+        source for source in sources
+        if Path(source.get("source", "")).name.casefold() != "ai_syllabus.md"
+    ]
 
 def quick_greeting(question: str) -> str | None:
     """Reply instantly to a greeting without calling search or the Gemini API."""
@@ -172,11 +224,12 @@ def chat(payload: ChatRequest, request: Request, response: Response):
         return {"answer": greeting, "sources": []}
     try:
         session_id = get_session_id(request, response)
-        sources, calendar_events = answer_context(question, session_id)
-        generated_answer = answer_question(question, sources, calendar_events=calendar_events)
+        history = [turn.model_dump() for turn in payload.history]
+        sources, calendar_events = answer_context(question, session_id, history)
+        generated_answer = answer_question(question, sources, calendar_events=calendar_events, history=history)
         return {"answer": generated_answer, "sources": [
             {"name": item["source"], "page": item.get("page"), "excerpt": item["text"], "relevance": item["score"]}
-            for item in sources
+            for item in visible_citations(sources)
         ]}
     except Exception as error:
         print(f"Chat request failed: {error}")
@@ -193,6 +246,7 @@ def chat_stream(payload: ChatRequest, request: Request, response: Response):
 
     greeting = quick_greeting(question)
     session_id = None if greeting else get_session_id(request, response)
+    history = [turn.model_dump() for turn in payload.history]
 
     def event_stream():
         # Newline-delimited JSON lets the browser process each update immediately.
@@ -208,16 +262,16 @@ def chat_stream(payload: ChatRequest, request: Request, response: Response):
         try:
             yield send({"type": "status", "message": "Searching your uploaded calendar…"})
             retrieval_started = perf_counter()
-            sources, calendar_events = answer_context(question, session_id)
+            sources, calendar_events = answer_context(question, session_id, history)
             retrieval_ms = round((perf_counter() - retrieval_started) * 1000)
             yield send({"type": "sources", "sources": [
                 {"name": item["source"], "page": item.get("page"), "excerpt": item["text"], "relevance": item["score"]}
-                for item in sources
+                for item in visible_citations(sources)
             ]})
 
             yield send({"type": "status", "message": "Preparing your answer…"})
             generation_started = perf_counter()
-            for update in stream_answer(question, sources, calendar_events=calendar_events):
+            for update in stream_answer(question, sources, calendar_events=calendar_events, history=history):
                 yield send(update)
             generation_ms = round((perf_counter() - generation_started) * 1000)
             total_ms = round((perf_counter() - request_started) * 1000)
