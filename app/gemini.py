@@ -8,6 +8,19 @@ from .config import GEMINI_API_KEY, GEMINI_MODEL
 
 BACKUP_MODELS = ("gemini-3.6-flash", "gemini-3.8-flash")
 
+def _generation_config(model: str, question: str) -> types.GenerateContentConfig:
+    """Keep everyday answers short while allowing enough room for a study plan."""
+    planning_request = any(term in question.casefold() for term in (
+        "study plan", "study schedule", "make a plan", "prepare for", "preparation plan", "what-if", "what if",
+    ))
+    # Calendar answers need only a few sentences. Plans get a larger limit so they
+    # are not cut off halfway through the schedule.
+    output_limit = 1800 if planning_request else 600
+    return types.GenerateContentConfig(
+        thinking_config=types.ThinkingConfig(thinking_level=_thinking_level(model)),
+        max_output_tokens=output_limit,
+    )
+
 def _thinking_level(model: str) -> str:
     """Use the lightest supported reasoning level for short calendar answers."""
     return "minimal" if model in {"gemini-3.5-flash-lite", "gemini-3.6-flash"} else "low"
@@ -75,9 +88,7 @@ def answer_question(question: str, sources: list[dict], calendar_events: list[di
             response = client.models.generate_content(
                 model=model,
                 contents=prompt,
-                config=types.GenerateContentConfig(
-                    thinking_config=types.ThinkingConfig(thinking_level=_thinking_level(model))
-                ),
+                config=_generation_config(model, question),
             )
             if response.text:
                 return response.text
@@ -107,9 +118,7 @@ def stream_answer(question: str, sources: list[dict], calendar_events: list[dict
             response_stream = client.models.generate_content_stream(
                 model=model,
                 contents=prompt,
-                config=types.GenerateContentConfig(
-                    thinking_config=types.ThinkingConfig(thinking_level=_thinking_level(model))
-                ),
+                config=_generation_config(model, question),
             )
             for chunk in response_stream:
                 if chunk.text:
