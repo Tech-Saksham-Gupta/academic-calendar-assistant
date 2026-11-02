@@ -1,5 +1,7 @@
 """Create concise, source-grounded answers with Google's Gemini API."""
 import time
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from google import genai
 from google.genai import types
 from .config import GEMINI_API_KEY, GEMINI_MODEL
@@ -37,9 +39,11 @@ def answer_question(question: str, sources: list[dict]) -> str:
     context = "\n\n".join(f"[{item['source']}]: {item['text']}" for item in sources)
     if not context:
         context = "No relevant passages were found in the uploaded calendar or course documents."
+    today = datetime.now(ZoneInfo("Asia/Kolkata")).date().isoformat()
     prompt = f"""You are Campus Compass, a helpful academic calendar and course assistant.
 Use the source excerpts below for institution-specific dates, deadlines, policies, and course facts. Never invent those details.
 If no relevant excerpt is available, tell the student the uploaded sources do not contain that answer and suggest uploading the official calendar or contacting the academic office. For general learning questions, you may explain the concept, but label it as a general explanation rather than an institutional fact.
+For study-plan requests, create a practical, encouraging plan working backward from the exam date. Use the current date ({today}) to determine how much preparation time remains. Use an exam date explicitly stated by the student as their provided detail; do not claim that the calendar verifies the subject or exam date unless a source excerpt says so. If the student gives a subject but no syllabus, suggest a reasonable general topic plan and clearly say it can be customized when they share their syllabus. If daily available study time is missing, assume about 2 hours per day and state that assumption. Include revision and practice questions, and keep each day's workload realistic. If the date has already passed or the year is unclear, ask a brief clarifying question instead of inventing a schedule.
 Be concise and student-friendly. Do not add inline filename citations; the interface displays source files and page numbers separately below your answer.
 
 SOURCE EXCERPTS:
