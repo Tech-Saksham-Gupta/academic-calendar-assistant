@@ -6,6 +6,7 @@ import json
 import re
 import secrets
 import string
+from datetime import date, datetime
 from time import perf_counter
 from typing import Literal
 
@@ -172,6 +173,146 @@ def answer_context(question: str, session_id: str, history: list[dict] | None = 
         calendar_events = extract_calendar_events(upload_dir)
     return sources, calendar_events
 
+def extract_planner_details(
+    question: str,
+    history: list[dict] | None = None,
+    calendar_events: list[dict] | None = None,
+) -> dict | None:
+    """Summarize exam details across turns so Gemini cannot lose short replies."""
+    history = history or []
+    user_messages = [turn["content"] for turn in history if turn["role"] == "user"] + [question]
+    combined = "\n".join(user_messages)
+    if not is_study_plan_question(combined):
+        return None
+
+    month_pattern = r"jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?"
+    month_numbers = {name: number for number, names in enumerate((
+        ("jan", "january"), ("feb", "february"), ("mar", "march"), ("apr", "april"),
+        ("may",), ("jun", "june"), ("jul", "july"), ("aug", "august"),
+        ("sep", "sept", "september"), ("oct", "october"), ("nov", "november"), ("dec", "december"),
+    ), start=1) for name in names}
+
+    # Find the most recent date the student typed, in either "Dec 16" or "16 Dec" form.
+    date_matches = []
+    for message in user_messages:
+        for match in re.finditer(
+            rf"\b(?:(?P<month_first>{month_pattern})\s+(?P<day_first>\d{{1,2}})(?:st|nd|rd|th)?|"
+            rf"(?P<day_second>\d{{1,2}})(?:st|nd|rd|th)?\s+(?P<month_second>{month_pattern}))"
+            rf"(?:,?\s*(?P<year>20\d{{2}}))?\b",
+            message,
+            re.IGNORECASE,
+        ):
+            month_name = (match.group("month_first") or match.group("month_second")).lower()
+            month_number = month_numbers.get(month_name)
+            if month_number:
+                date_matches.append((month_number, int(match.group("day_first") or match.group("day_second")), int(match.group("year")) if match.group("year") else None))
+
+    # Also accept unambiguous ISO dates.
+    for message in user_messages:
+        for match in re.finditer(r"\b(20\d{2})-(\d{2})-(\d{2})\b", message):
+            date_matches.append((int(match.group(2)), int(match.group(3)), int(match.group(1))))
+    exam_date = None
+    date_was_assumed = False
+    if date_matches:
+        month_number, day_number, year_number = date_matches[-1]
+        today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
+        if year_number is None:
+            # Prefer the year from an uploaded calendar event matching this date.
+            matching_years = []
+            for event in calendar_events or []:
+                start = datetime.strptime(event["start_date"], "%Y-%m-%d").date()
+                end = datetime.strptime(event.get("end_date") or event["start_date"], "%Y-%m-%d").date()
+                try:
+                    candidate = date(start.year, month_number, day_number)
+                    if start <= candidate <= end:
+                        matching_years.append(start.year)
+                except ValueError:
+                    continue
+            if matching_years:
+                year_number = matching_years[0]
+                date_was_assumed = True
+            else:
+                year_number = today.year
+                try:
+                    candidate = date(year_number, month_number, day_number)
+                except ValueError:
+                    candidate = None
+                if candidate is not None and candidate < today:
+                    year_number += 1
+                date_was_assumed = True
+        try:
+            exam_date = date(year_number, month_number, day_number).isoformat()
+        except ValueError:
+            exam_date = None
+
+    # Read a named course from exam phrases, subject labels, or a standalone reply
+    # after the assistant explicitly asked which subject the student is studying.
+    subject = ""
+    subject_patterns = (
+        r"\b(?:my|a|an)\s+([a-z][a-z0-9&+ /-]{0,45}?)\s+(?:exam|test)\b",
+        r"\bsubject\s*(?:is|:)?\s+([a-z][a-z0-9&+ /-]{1,45})",
+    )
+    for message in reversed(user_messages):
+        for pattern in subject_patterns:
+            match = re.search(pattern, message, re.IGNORECASE)
+            if match:
+                subject = re.sub(r"\s+", " ", match.group(1)).strip(" .,:;!?-")
+                break
+        if subject:
+            break
+
+    ignored_subjects = {"final", "upcoming", "semester", "the", "exam", "test"}
+    if not subject:
+        ignored_acronyms = {
+            "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "SEPT", "OCT", "NOV", "DEC",
+            "ANS", "AND", "THE", "FOR", "HRS", "YES", "OK", "AM", "PM", "LPU", "CSE", "CONFIRM",
+        }
+        for message in reversed(user_messages):
+            candidates = [word for word in re.findall(r"\b[A-Z][A-Z0-9]{1,5}\b", message) if word not in ignored_acronyms]
+            if candidates:
+                subject = candidates[0]
+                break
+    if not subject:
+        for index, turn in enumerate(history):
+            if turn["role"] != "assistant" or "subject" not in turn["content"].casefold():
+                continue
+            reply = next((item["content"] for item in history[index + 1:] if item["role"] == "user"), "")
+            cleaned_reply = re.sub(
+                rf"\b(?:{month_pattern})\s+\d{{1,2}}(?:st|nd|rd|th)?(?:,?\s*20\d{{2}})?\b"
+                rf"|\b\d{{1,2}}(?:st|nd|rd|th)?\s+(?:{month_pattern})\b"
+                r"|\b\d+(?:\.\d+)?\s*(?:hours?|hrs?|h|minutes?|mins?)\b",
+                " ", reply, flags=re.IGNORECASE,
+            )
+            remaining_words = [word for word in re.findall(r"[A-Za-z]+", cleaned_reply) if word.casefold() not in ignored_subjects | {"ans", "confirm", "and", "per", "day"}]
+            if remaining_words:
+                subject = " ".join(remaining_words[:6])
+                break
+
+    hours_matches = []
+    for message in user_messages:
+        hours_matches.extend(re.findall(r"\b(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h)\b", message, re.IGNORECASE))
+    daily_hours = hours_matches[-1] if hours_matches else "2 (default assumption)"
+
+    lowered = combined.casefold()
+    if any(phrase in lowered for phrase in ("zero prep", "no preparation", "not started", "starting from scratch")):
+        preparation = "zero / starting from fundamentals"
+    else:
+        preparation = "not specified by the student"
+
+    difficult_topics = "not specified by the student"
+    difficulty_match = re.search(r"(?:struggle with|weak in|difficult topics? (?:are|is|:))\s*(.+)", combined, re.IGNORECASE)
+    if difficulty_match:
+        difficult_topics = difficulty_match.group(1).strip()
+
+    return {
+        "subject": subject or "not specified yet",
+        "exam_date": exam_date or "not specified yet",
+        "date_year_assumed": date_was_assumed,
+        "daily_study_hours": daily_hours,
+        "preparation_level": preparation,
+        "difficult_topics": difficult_topics,
+    }
+
 def visible_citations(sources: list[dict]) -> list[dict]:
     """Hide the bundled starter syllabus from citation chips in every reply."""
     return [
@@ -226,7 +367,11 @@ def chat(payload: ChatRequest, request: Request, response: Response):
         session_id = get_session_id(request, response)
         history = [turn.model_dump() for turn in payload.history]
         sources, calendar_events = answer_context(question, session_id, history)
-        generated_answer = answer_question(question, sources, calendar_events=calendar_events, history=history)
+        planner_details = extract_planner_details(question, history, calendar_events)
+        generated_answer = answer_question(
+            question, sources, calendar_events=calendar_events,
+            history=history, planner_details=planner_details,
+        )
         return {"answer": generated_answer, "sources": [
             {"name": item["source"], "page": item.get("page"), "excerpt": item["text"], "relevance": item["score"]}
             for item in visible_citations(sources)
@@ -264,6 +409,7 @@ def chat_stream(payload: ChatRequest, request: Request, response: Response):
             retrieval_started = perf_counter()
             sources, calendar_events = answer_context(question, session_id, history)
             retrieval_ms = round((perf_counter() - retrieval_started) * 1000)
+            planner_details = extract_planner_details(question, history, calendar_events)
             yield send({"type": "sources", "sources": [
                 {"name": item["source"], "page": item.get("page"), "excerpt": item["text"], "relevance": item["score"]}
                 for item in visible_citations(sources)
@@ -271,7 +417,10 @@ def chat_stream(payload: ChatRequest, request: Request, response: Response):
 
             yield send({"type": "status", "message": "Preparing your answer…"})
             generation_started = perf_counter()
-            for update in stream_answer(question, sources, calendar_events=calendar_events, history=history):
+            for update in stream_answer(
+                question, sources, calendar_events=calendar_events,
+                history=history, planner_details=planner_details,
+            ):
                 yield send(update)
             generation_ms = round((perf_counter() - generation_started) * 1000)
             total_ms = round((perf_counter() - request_started) * 1000)
