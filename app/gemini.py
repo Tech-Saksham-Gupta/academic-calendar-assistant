@@ -1,4 +1,5 @@
 """Create concise, source-grounded answers with Google's Gemini API."""
+import json
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from collections.abc import Iterator
@@ -48,6 +49,7 @@ def _build_prompt(
     sources: list[dict],
     calendar_events: list[dict] | None = None,
     history: list[dict] | None = None,
+    planner_details: dict | None = None,
 ) -> str:
     """Build the same grounded prompt for both normal and streaming answers."""
     context = "\n\n".join(f"[{item['source']}]: {item['text']}" for item in sources)
@@ -69,16 +71,21 @@ def _build_prompt(
         f"{turn['role'].upper()}: {turn['content'][-1200:]}"
         for turn in history[-8:]
     ) or "No earlier messages in this chat."
+    planner_context = json.dumps(planner_details, ensure_ascii=False) if planner_details else "Not a study-plan request."
     prompt = f"""You are Campus Compass, a helpful academic calendar and course assistant.
 Project information: Campus Compass was made by Saksham Gupta, a second-year CSE student at LPU. If asked who made, created, or developed this website or project, answer clearly: "This website was made by Saksham Gupta, a second-year CSE student at LPU." Do not invent additional biographical details.
 Use the recent conversation to understand short follow-up replies and remember details the student has already provided. Do not ask again for information already present in the conversation.
+For study plans, use the accumulated planner details below as the authoritative summary of the student's messages. If the subject and exam date are provided there, do not ask the student to repeat them or confirm them; create the plan now. If the year was assumed, state the assumption briefly without asking for confirmation. A date that falls in a general exam period does not prove the subject's exact exam schedule.
 Use the source excerpts below for institution-specific dates, deadlines, policies, and course facts. Never invent those details.
 If no relevant excerpt is available, tell the student the uploaded sources do not contain that answer and suggest uploading the official calendar or contacting the academic office. For general learning questions, you may explain the concept, but label it as a general explanation rather than an institutional fact.
-For study-plan and what-if requests, first check the whole conversation for the subject and exam date. If either is missing, ask only for the missing required detail(s), optionally ask about daily study time and difficult topics, and do not produce a plan yet. In this clarification, do not list unrelated syllabus details or calendar events. Once subject and date are known, make the plan immediately; daily hours and difficult topics are optional, so use the student's answer if provided or assume about 2 hours per day and say so. Never repeat questions for details already given. Build a practical plan from the current date ({today}) to the exam date. Treat the student's exam details as user-provided, not as calendar facts. Use uploaded calendar events below to ground academic dates and flag nearby deadlines, breaks, classes, or exam periods; do not claim an event conflicts with personal commitments unless the student said so. If the calendar shows only a general final-exam period, state that the exact subject exam date came from the student and only say whether it falls inside that period. For a date without a year, use the next future matching date only when the calendar makes the year clear; otherwise ask briefly. If the student says preparation is zero, start with fundamentals, then guided practice, timed problem solving, and revision. If no syllabus is provided, label the topic sequence as a general suggestion and invite the student to share it. Make the plan specific by weeks or dates, include practice and buffer/revision time, and keep the workload realistic. Mention upcoming calendar dates that may affect the plan; don't invent institutional events. For normal date questions, answer directly and concisely.
+For study-plan and what-if requests, first check whether subject and exam date are present in the planner details. If either is missing, ask only for the missing required detail(s), optionally ask about daily study time and difficult topics, and do not produce a plan yet. In this clarification, do not list unrelated syllabus details or calendar events. Once subject and date are known, make the plan immediately; daily hours and difficult topics are optional, so use the student's answer if provided or assume about 2 hours per day and say so. Never repeat questions for details already given. Build a practical plan from the current date ({today}) to the exam date. Treat the student's exam details as user-provided, not as calendar facts. Use uploaded calendar events below to ground academic dates and flag nearby deadlines, breaks, classes, or exam periods; do not claim an event conflicts with personal commitments unless the student said so. If the calendar shows only a general final-exam period, state that the exact subject exam date came from the student and only say whether it falls inside that period. If no syllabus is provided, label the topic sequence as a general suggestion. Make the plan specific by weeks or dates, include practice and buffer/revision time, and keep the workload realistic. Mention upcoming calendar dates that may affect the plan; don't invent institutional events. For normal date questions, answer directly and concisely.
 Be concise and student-friendly. Do not add inline filename citations; the interface displays source files and page numbers separately below your answer.
 
 RECENT CONVERSATION:
 {recent_conversation}
+
+ACCUMULATED STUDY-PLAN DETAILS (student-provided unless marked as an assumed year):
+{planner_context}
 
 SOURCE EXCERPTS:
 {context}
@@ -95,11 +102,12 @@ def answer_question(
     sources: list[dict],
     calendar_events: list[dict] | None = None,
     history: list[dict] | None = None,
+    planner_details: dict | None = None,
 ) -> str:
     """Ask Gemini to answer only from retrieved context and admit uncertainty."""
     if not GEMINI_API_KEY:
         raise RuntimeError("GEMINI_API_KEY is missing. Add it in Render → your service → Environment, then redeploy.")
-    prompt = _build_prompt(question, sources, calendar_events, history)
+    prompt = _build_prompt(question, sources, calendar_events, history, planner_details)
     client = genai.Client(api_key=GEMINI_API_KEY)
     # Try the configured model first, then stable backup models for service overload.
     models = list(dict.fromkeys((GEMINI_MODEL, *BACKUP_MODELS)))
@@ -127,6 +135,7 @@ def stream_answer(
     sources: list[dict],
     calendar_events: list[dict] | None = None,
     history: list[dict] | None = None,
+    planner_details: dict | None = None,
 ) -> Iterator[dict]:
     """Yield answer tokens as Gemini creates them to reduce perceived waiting time."""
     if not GEMINI_API_KEY:
@@ -134,7 +143,7 @@ def stream_answer(
         return
 
     client = genai.Client(api_key=GEMINI_API_KEY)
-    prompt = _build_prompt(question, sources, calendar_events, history)
+    prompt = _build_prompt(question, sources, calendar_events, history, planner_details)
     models = list(dict.fromkeys((GEMINI_MODEL, *BACKUP_MODELS)))
     last_error = None
 
