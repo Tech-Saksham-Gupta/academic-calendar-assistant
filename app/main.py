@@ -2,17 +2,19 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 import hashlib
+import json
 import re
 import secrets
+import string
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request, Response
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .config import STATIC_DIR, USER_DATA_DIR, DATA_DIR, MAX_UPLOAD_MB, GEMINI_API_KEY
 from .rag import KnowledgeBase
-from .gemini import answer_question
+from .gemini import answer_question, stream_answer
 from .documents import extract_calendar_events
 
 # Shared syllabus is indexed once. Each visitor with an upload gets a separate index.
@@ -86,6 +88,19 @@ def is_study_plan_question(question: str) -> bool:
     )
     return any(phrase in text for phrase in planning_phrases)
 
+def quick_greeting(question: str) -> str | None:
+    """Reply instantly to a greeting without calling search or the Gemini API."""
+    # Only treat a message as a greeting when the entire message is a greeting.
+    # For example, "Hi, when is my exam?" still goes through RAG and Gemini.
+    cleaned = question.casefold().strip().translate(str.maketrans("", "", string.punctuation))
+    greetings = {
+        "hi", "hello", "hey", "hi there", "hello there", "hey there",
+        "good morning", "good afternoon", "good evening",
+    }
+    if cleaned in greetings:
+        return "Hi! I’m Campus Compass. Ask me about dates and deadlines in your uploaded academic calendar, or tell me about an exam to make a study plan."
+    return None
+
 @app.get("/")
 def home(request: Request, response: Response):
     """Serve the chat page and initialize a private browser session."""
@@ -112,6 +127,10 @@ def chat(payload: ChatRequest, request: Request, response: Response):
     question = payload.question.strip()
     if not question:
         raise HTTPException(status_code=400, detail="Please enter a question.")
+    greeting = quick_greeting(question)
+    if greeting:
+        # Greetings do not need retrieval or AI generation, so return them immediately.
+        return {"answer": greeting, "sources": []}
     try:
         session_id = get_session_id(request, response)
         sources = knowledge_for(session_id).retrieve(question)
@@ -131,6 +150,58 @@ def chat(payload: ChatRequest, request: Request, response: Response):
         if "GEMINI_API_KEY is missing" in str(error):
             raise HTTPException(status_code=503, detail=str(error))
         raise HTTPException(status_code=502, detail="The assistant could not complete this request. Please try again in a moment.")
+
+@app.post("/api/chat/stream")
+def chat_stream(payload: ChatRequest, request: Request, response: Response):
+    """Stream status and Gemini answer tokens to the browser as soon as available."""
+    question = payload.question.strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="Please enter a question.")
+
+    greeting = quick_greeting(question)
+    session_id = None if greeting else get_session_id(request, response)
+
+    def event_stream():
+        # Newline-delimited JSON lets the browser process each update immediately.
+        def send(event: dict) -> str:
+            return json.dumps(event, ensure_ascii=False) + "\n"
+
+        if greeting:
+            yield send({"type": "token", "text": greeting})
+            yield send({"type": "done"})
+            return
+
+        try:
+            yield send({"type": "status", "message": "Searching your uploaded calendar…"})
+            sources = knowledge_for(session_id).retrieve(question)
+            yield send({"type": "sources", "sources": [
+                {"name": item["source"], "page": item.get("page"), "excerpt": item["text"], "relevance": item["score"]}
+                for item in sources
+            ]})
+
+            calendar_events = None
+            if is_study_plan_question(question):
+                _, upload_dir = user_directories(session_id)
+                calendar_events = extract_calendar_events(upload_dir)
+
+            yield send({"type": "status", "message": "Preparing your answer…"})
+            for update in stream_answer(question, sources, calendar_events=calendar_events):
+                yield send(update)
+            yield send({"type": "done"})
+        except Exception as error:
+            print(f"Streaming chat request failed: {error}")
+            yield send({"type": "error", "message": "I couldn't complete that request. Please try again in a moment."})
+
+    stream_response = StreamingResponse(
+        event_stream(),
+        media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
+    )
+    # Preserve a newly-created private workspace cookie on the streaming response.
+    for name, value in response.raw_headers:
+        if name.lower() == b"set-cookie":
+            stream_response.raw_headers.append((name, value))
+    return stream_response
 
 @app.post("/api/documents")
 async def upload_document(request: Request, response: Response, file: UploadFile = File(...)):
