@@ -1,6 +1,7 @@
 """Create concise, source-grounded answers with Google's Gemini API."""
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from collections.abc import Iterator
 from google import genai
 from google.genai import types
 from .config import GEMINI_API_KEY, GEMINI_MODEL
@@ -28,13 +29,8 @@ def _source_fallback(sources: list[dict]) -> str:
     return ("Gemini is temporarily busy, so here are the closest passages I found in your sources. "
             "Please verify the wording in the cited document.\n\n" + excerpts)
 
-def answer_question(question: str, sources: list[dict], calendar_events: list[dict] | None = None) -> str:
-    """Ask Gemini to answer only from retrieved context and admit uncertainty."""
-    if not GEMINI_API_KEY:
-        raise RuntimeError("GEMINI_API_KEY is missing. Add it in Render → your service → Environment, then redeploy.")
-    # Still call Gemini when retrieval finds nothing. The model can give a natural
-    # explanation that the knowledge base is missing the answer instead of returning
-    # a canned message that makes the whole app look like a static FAQ.
+def _build_prompt(question: str, sources: list[dict], calendar_events: list[dict] | None = None) -> str:
+    """Build the same grounded prompt for both normal and streaming answers."""
     context = "\n\n".join(f"[{item['source']}]: {item['text']}" for item in sources)
     if not context:
         context = "No relevant passages were found in the uploaded calendar or course documents."
@@ -63,6 +59,13 @@ UPLOADED CALENDAR EVENT LIST (use for planning around academic dates):
 
 STUDENT QUESTION: {question}
 ANSWER:"""
+    return prompt
+
+def answer_question(question: str, sources: list[dict], calendar_events: list[dict] | None = None) -> str:
+    """Ask Gemini to answer only from retrieved context and admit uncertainty."""
+    if not GEMINI_API_KEY:
+        raise RuntimeError("GEMINI_API_KEY is missing. Add it in Render → your service → Environment, then redeploy.")
+    prompt = _build_prompt(question, sources, calendar_events)
     client = genai.Client(api_key=GEMINI_API_KEY)
     # Try the configured model first, then stable backup models for service overload.
     models = list(dict.fromkeys((GEMINI_MODEL, *BACKUP_MODELS)))
@@ -86,3 +89,42 @@ ANSWER:"""
                 raise RuntimeError(f"Gemini could not answer with model {model}: {error}") from error
     print(f"All Gemini answer models are temporarily unavailable: {last_error}")
     return _source_fallback(sources)
+
+def stream_answer(question: str, sources: list[dict], calendar_events: list[dict] | None = None) -> Iterator[dict]:
+    """Yield answer tokens as Gemini creates them to reduce perceived waiting time."""
+    if not GEMINI_API_KEY:
+        yield {"type": "error", "message": "Gemini API key is not configured. Add GEMINI_API_KEY in Render's Environment settings."}
+        return
+
+    client = genai.Client(api_key=GEMINI_API_KEY)
+    prompt = _build_prompt(question, sources, calendar_events)
+    models = list(dict.fromkeys((GEMINI_MODEL, *BACKUP_MODELS)))
+    last_error = None
+
+    for model in models:
+        received_text = False
+        try:
+            response_stream = client.models.generate_content_stream(
+                model=model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    thinking_config=types.ThinkingConfig(thinking_level=_thinking_level(model))
+                ),
+            )
+            for chunk in response_stream:
+                if chunk.text:
+                    received_text = True
+                    yield {"type": "token", "text": chunk.text}
+            if received_text:
+                return
+            raise RuntimeError(f"Gemini model {model} returned an empty response.")
+        except Exception as error:
+            last_error = error
+            # If no usable stream has arrived, move to another model when overloaded.
+            if received_text or not _is_temporary_error(error):
+                print(f"Gemini streaming failed for {model}: {error}")
+                yield {"type": "error", "message": "The assistant could not finish this answer. Please try again."}
+                return
+
+    print(f"All Gemini streaming models are temporarily unavailable: {last_error}")
+    yield {"type": "token", "text": _source_fallback(sources)}
