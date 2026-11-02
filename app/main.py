@@ -89,6 +89,44 @@ def is_study_plan_question(question: str) -> bool:
     )
     return any(phrase in text for phrase in planning_phrases)
 
+def study_plan_has_exam_details(question: str) -> bool:
+    """Require a usable subject and date before retrieving citations for a plan."""
+    text = question.casefold()
+    month = r"jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?"
+    has_date = bool(re.search(
+        rf"\b(?:{month})\s+\d{{1,2}}(?:st|nd|rd|th)?(?:,?\s+20\d{{2}})?\b"
+        rf"|\b\d{{1,2}}(?:st|nd|rd|th)?\s+(?:{month})\b"
+        rf"|\b20\d{{2}}-\d{{2}}-\d{{2}}\b",
+        text,
+    ))
+    subject_match = re.search(
+        r"\b(?:my|a|an)\s+([a-z][a-z0-9&+ /-]{0,45}?)\s+(?:exam|test)\b",
+        text,
+    )
+    subject = subject_match.group(1).strip() if subject_match else ""
+    has_subject = bool(subject and subject not in {"final", "upcoming", "semester", "the"})
+    return has_date and has_subject
+
+def answer_context(question: str, session_id: str) -> tuple[list[dict], list[dict] | None]:
+    """Retrieve evidence, avoiding irrelevant citations for an incomplete study-plan request."""
+    planning = is_study_plan_question(question)
+    if planning and not study_plan_has_exam_details(question):
+        # The assistant should ask for the missing subject/date first, without
+        # attaching unrelated retrieved pages to a clarification message.
+        return [], None
+
+    sources = knowledge_for(session_id).retrieve(question)
+    calendar_events = None
+    if planning:
+        # The shared AI syllabus is not evidence for a calendar-grounded plan unless
+        # the student explicitly says the exam is for that course.
+        mentions_ai_course = bool(re.search(r"\b(?:ai|artificial intelligence)\b", question, re.IGNORECASE))
+        if not mentions_ai_course:
+            sources = [source for source in sources if source["source"].casefold() != "ai_syllabus.md"]
+        _, upload_dir = user_directories(session_id)
+        calendar_events = extract_calendar_events(upload_dir)
+    return sources, calendar_events
+
 def quick_greeting(question: str) -> str | None:
     """Reply instantly to a greeting without calling search or the Gemini API."""
     # Only treat a message as a greeting when the entire message is a greeting.
@@ -134,13 +172,7 @@ def chat(payload: ChatRequest, request: Request, response: Response):
         return {"answer": greeting, "sources": []}
     try:
         session_id = get_session_id(request, response)
-        sources = knowledge_for(session_id).retrieve(question)
-        # Pass the whole uploaded event list for study plans so Gemini can schedule
-        # around known academic dates, not only the top matching text passages.
-        calendar_events = None
-        if is_study_plan_question(question):
-            _, upload_dir = user_directories(session_id)
-            calendar_events = extract_calendar_events(upload_dir)
+        sources, calendar_events = answer_context(question, session_id)
         generated_answer = answer_question(question, sources, calendar_events=calendar_events)
         return {"answer": generated_answer, "sources": [
             {"name": item["source"], "page": item.get("page"), "excerpt": item["text"], "relevance": item["score"]}
@@ -176,17 +208,12 @@ def chat_stream(payload: ChatRequest, request: Request, response: Response):
         try:
             yield send({"type": "status", "message": "Searching your uploaded calendar…"})
             retrieval_started = perf_counter()
-            sources = knowledge_for(session_id).retrieve(question)
+            sources, calendar_events = answer_context(question, session_id)
             retrieval_ms = round((perf_counter() - retrieval_started) * 1000)
             yield send({"type": "sources", "sources": [
                 {"name": item["source"], "page": item.get("page"), "excerpt": item["text"], "relevance": item["score"]}
                 for item in sources
             ]})
-
-            calendar_events = None
-            if is_study_plan_question(question):
-                _, upload_dir = user_directories(session_id)
-                calendar_events = extract_calendar_events(upload_dir)
 
             yield send({"type": "status", "message": "Preparing your answer…"})
             generation_started = perf_counter()
