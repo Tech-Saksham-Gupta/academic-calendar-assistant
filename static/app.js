@@ -200,6 +200,15 @@ input.addEventListener('keydown', (event) => {
 document.querySelectorAll('[data-question]').forEach((button) => {
   button.addEventListener('click', () => ask(button.dataset.question));
 });
+document.querySelectorAll('[data-prefill]').forEach((button) => {
+  button.addEventListener('click', () => {
+    input.value = button.dataset.prefill;
+    input.focus();
+    input.style.height = 'auto';
+    input.style.height = `${Math.min(input.scrollHeight, 130)}px`;
+    input.setSelectionRange(0, 0);
+  });
+});
 
 function chooseFile() { filePicker.click(); }
 document.querySelector('#upload-button').addEventListener('click', chooseFile);
