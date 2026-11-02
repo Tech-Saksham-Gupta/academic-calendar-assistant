@@ -30,8 +30,12 @@
       </div>
 
       <div class="nav-label">WORKSPACE</div>
-      <button class="nav-item active" type="button"><span>▦</span> Ask the assistant</button>
-      <button class="nav-item" id="calendar-nav" type="button"><span>▣</span> Academic calendar</button>
+      <button class="nav-item active" type="button">
+        <span>▦</span> Ask the assistant
+      </button>
+      <button class="nav-item" id="calendar-nav" type="button">
+        <span>▣</span> Academic calendar
+      </button>
 
       <div class="nav-label sources-label">KNOWLEDGE</div>
       <div class="source-item">
@@ -54,8 +58,11 @@
           <div class="help-icon">✦</div>
           <strong>Your sources, your workspace</strong>
           <p>Upload a calendar for this browser workspace. Other visitors cannot see your uploaded files.</p>
-          <button id="add-source" class="text-button" type="button">Add a source <span>↗</span></button>
+          <button id="add-source" class="text-button" type="button">
+            Add a source <span>↗</span>
+          </button>
         </div>
+
         <div class="profile">
           <div class="avatar">S</div>
           <div>
@@ -71,7 +78,10 @@
       <header class="topbar">
         <div class="crumb">Workspace <span>/</span> <strong>Assistant</strong></div>
         <div class="top-actions">
-          <div class="status"><i></i><span id="status-text">Assistant ready</span></div>
+          <div class="status">
+            <i></i>
+            <span id="status-text">Assistant ready</span>
+          </div>
           <button class="icon-button" aria-label="Help" title="Help">?</button>
         </div>
       </header>
@@ -95,11 +105,17 @@
           <div class="welcome-mark"><span>✳</span></div>
           <div class="eyebrow">YOUR ACADEMIC SIDEKICK</div>
           <h1>Make your semester<br><em>make sense.</em></h1>
-          <p class="intro">Get clear answers about important dates, deadlines, and your course — all in one place.</p>
+          <p class="intro">
+            Get clear answers about important dates, deadlines, and your course — all in one place.
+          </p>
 
           <div class="suggestions-label">A FEW THINGS YOU CAN ASK</div>
           <div class="suggestions">
-            <button class="suggestion" data-question="When does my next semester begin?" type="button">
+            <button
+              class="suggestion"
+              data-question="When does my next semester begin?"
+              type="button"
+            >
               <span class="suggestion-icon date">▣</span>
               <span>
                 <strong>When does my next semester begin?</strong>
@@ -108,7 +124,11 @@
               <span class="arrow">↗</span>
             </button>
 
-            <button class="suggestion" data-question="What is the next important deadline?" type="button">
+            <button
+              class="suggestion"
+              data-question="What is the next important deadline?"
+              type="button"
+            >
               <span class="suggestion-icon learn">✧</span>
               <span>
                 <strong>What is my next important deadline?</strong>
@@ -117,11 +137,29 @@
               <span class="arrow">↗</span>
             </button>
 
-            <button class="suggestion" data-question="When are my final exams scheduled?" type="button">
+            <button
+              class="suggestion"
+              data-question="When are my final exams scheduled?"
+              type="button"
+            >
               <span class="suggestion-icon idea">⌁</span>
               <span>
                 <strong>When are my final exams scheduled?</strong>
                 <small>Find exam dates in your calendar</small>
+              </span>
+              <span class="arrow">↗</span>
+            </button>
+
+            <!-- Clicking this suggestion fills in a prompt to personalize before sending. -->
+            <button
+              class="suggestion"
+              data-prefill="I have a [subject] exam on [date]. I have [hours] hours per day and I am struggling with [topics]. Make a study plan around my uploaded academic calendar."
+              type="button"
+            >
+              <span class="suggestion-icon learn">✦</span>
+              <span>
+                <strong>Build a study plan around an exam</strong>
+                <small>Plan around your calendar dates and deadlines</small>
               </span>
               <span class="arrow">↗</span>
             </button>
@@ -154,6 +192,7 @@
             </div>
           </div>
         </form>
+
         <input id="file-picker" type="file" accept=".pdf,.csv,.md,.txt" hidden>
         <p class="disclaimer">Campus Compass can make mistakes. Verify important dates with your institution.</p>
         <p class="creator-credit">Designed and built by Saksham Gupta</p>
@@ -166,6 +205,7 @@
           <div class="eyebrow">YOUR SEMESTER</div>
           <h2>At a glance</h2>
         </div>
+
         <div class="rail-menu">
           <button
             class="icon-button"
@@ -176,9 +216,14 @@
             aria-expanded="false"
             aria-controls="calendar-options"
           >···</button>
+
           <div class="rail-menu-list" id="calendar-options" role="menu" hidden>
-            <button type="button" id="refresh-calendar" role="menuitem">↻ <span>Refresh dates</span></button>
-            <button type="button" id="upload-calendar-again" role="menuitem">＋ <span>Upload another calendar</span></button>
+            <button type="button" id="refresh-calendar" role="menuitem">
+              ↻ <span>Refresh dates</span>
+            </button>
+            <button type="button" id="upload-calendar-again" role="menuitem">
+              ＋ <span>Upload another calendar</span>
+            </button>
           </div>
         </div>
       </div>
@@ -194,9 +239,7 @@
           <span>Calendar progress</span>
           <strong id="progress-label">—</strong>
         </div>
-        <div class="progress-track">
-          <span id="calendar-progress-value"></span>
-        </div>
+        <div class="progress-track"><span id="calendar-progress-value"></span></div>
         <div class="progress-bottom" id="progress-caption">Upload a calendar to see your dates.</div>
       </div>
 
