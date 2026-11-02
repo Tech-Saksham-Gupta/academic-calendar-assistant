@@ -76,6 +76,16 @@ def knowledge_for(session_id: str) -> KnowledgeBase:
         kb.rebuild()
     return kb
 
+def is_study_plan_question(question: str) -> bool:
+    """Include the user's calendar schedule for planning and what-if questions."""
+    text = question.casefold()
+    planning_phrases = (
+        "study plan", "study schedule", "plan my study", "plan my preparation",
+        "make a plan", "create a plan", "prepare for", "preparation plan",
+        "what if", "what-if", "padhai ka plan", "study karne ka plan",
+    )
+    return any(phrase in text for phrase in planning_phrases)
+
 @app.get("/")
 def home(request: Request, response: Response):
     """Serve the chat page and initialize a private browser session."""
@@ -105,7 +115,13 @@ def chat(payload: ChatRequest, request: Request, response: Response):
     try:
         session_id = get_session_id(request, response)
         sources = knowledge_for(session_id).retrieve(question)
-        generated_answer = answer_question(question, sources)
+        # Pass the whole uploaded event list for study plans so Gemini can schedule
+        # around known academic dates, not only the top matching text passages.
+        calendar_events = None
+        if is_study_plan_question(question):
+            _, upload_dir = user_directories(session_id)
+            calendar_events = extract_calendar_events(upload_dir)
+        generated_answer = answer_question(question, sources, calendar_events=calendar_events)
         return {"answer": generated_answer, "sources": [
             {"name": item["source"], "page": item.get("page"), "excerpt": item["text"], "relevance": item["score"]}
             for item in sources
