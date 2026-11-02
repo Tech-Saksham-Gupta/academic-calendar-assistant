@@ -29,7 +29,7 @@ def _source_fallback(sources: list[dict]) -> str:
     return ("Gemini is temporarily busy, so here are the closest passages I found in your sources. "
             "Please verify the wording in the cited document.\n\n" + excerpts)
 
-def answer_question(question: str, sources: list[dict]) -> str:
+def answer_question(question: str, sources: list[dict], calendar_events: list[dict] | None = None) -> str:
     """Ask Gemini to answer only from retrieved context and admit uncertainty."""
     if not GEMINI_API_KEY:
         raise RuntimeError("GEMINI_API_KEY is missing. Add it in Render → your service → Environment, then redeploy.")
@@ -39,15 +39,28 @@ def answer_question(question: str, sources: list[dict]) -> str:
     context = "\n\n".join(f"[{item['source']}]: {item['text']}" for item in sources)
     if not context:
         context = "No relevant passages were found in the uploaded calendar or course documents."
+    event_context = "No dated events were extracted from the user's uploaded calendar."
+    if calendar_events:
+        event_lines = []
+        for event in calendar_events:
+            date_range = event["start_date"]
+            if event.get("end_date") and event["end_date"] != event["start_date"]:
+                date_range += f" to {event['end_date']}"
+            term = f"; {event['term']}" if event.get("term") else ""
+            event_lines.append(f"- {date_range}: {event['title']}{term}")
+        event_context = "\n".join(event_lines)
     today = datetime.now(ZoneInfo("Asia/Kolkata")).date().isoformat()
     prompt = f"""You are Campus Compass, a helpful academic calendar and course assistant.
 Use the source excerpts below for institution-specific dates, deadlines, policies, and course facts. Never invent those details.
 If no relevant excerpt is available, tell the student the uploaded sources do not contain that answer and suggest uploading the official calendar or contacting the academic office. For general learning questions, you may explain the concept, but label it as a general explanation rather than an institutional fact.
-For study-plan requests, create a practical, encouraging plan working backward from the exam date. Use the current date ({today}) to determine how much preparation time remains. Use an exam date explicitly stated by the student as their provided detail; do not claim that the calendar verifies the subject or exam date unless a source excerpt says so. If the student gives a subject but no syllabus, suggest a reasonable general topic plan and clearly say it can be customized when they share their syllabus. If daily available study time is missing, assume about 2 hours per day and state that assumption. Include revision and practice questions, and keep each day's workload realistic. If the date has already passed or the year is unclear, ask a brief clarifying question instead of inventing a schedule.
+For study-plan and what-if requests, build a practical plan from the current date ({today}) to the exam date. The student may provide the exam date, subject, current preparation level, available hours, or difficult topics. Treat those details as user-provided, not as calendar facts. Use the uploaded calendar events below to ground academic dates and to flag nearby deadlines, breaks, classes, or exam periods; do not claim an event conflicts with personal commitments unless the student said so. If the calendar shows only a general final-exam period, state that the exact subject exam date came from the student and only say whether it falls inside that period. For a date without a year, use the next future matching date only when the calendar makes the year clear; otherwise ask briefly. If the student says preparation is zero, start with fundamentals, then guided practice, timed problem solving, and revision. If no syllabus is provided, label the topic sequence as a general suggestion and invite the student to share the syllabus. If daily available study time is missing, assume about 2 hours and state the assumption. Make the plan specific by weeks or dates, include practice and buffer/revision time, and keep the workload realistic. Mention upcoming calendar dates that may affect the plan; don't invent institutional events. For normal date questions, answer directly and concisely.
 Be concise and student-friendly. Do not add inline filename citations; the interface displays source files and page numbers separately below your answer.
 
 SOURCE EXCERPTS:
 {context}
+
+UPLOADED CALENDAR EVENT LIST (use for planning around academic dates):
+{event_context}
 
 STUDENT QUESTION: {question}
 ANSWER:"""
