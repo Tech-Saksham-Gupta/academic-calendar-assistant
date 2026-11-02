@@ -13,3 +13,20 @@
 /* Readability pass: enlarge small supporting text while preserving the layout. */
 .nav-label,.eyebrow{font-size:10px}.campus-card strong,.source-item strong,.profile strong{font-size:12px}.campus-card span,.source-item span,.profile span{font-size:11px}.nav-item{font-size:13px}.help-card strong{font-size:12px}.help-card p{font-size:11px}.text-button{font-size:11px}.crumb{font-size:12px}.status{font-size:11px}.suggestions-label{font-size:10px}.suggestion strong{font-size:12px}.suggestion small{font-size:11px}.composer textarea{font-size:14px}.input-hint,.disclaimer{font-size:10px}.campus-mark{font-size:12px}.semester-card h3{font-size:13px}.semester-card>p{font-size:11px}.progress-meta{font-size:10px}.progress-bottom{font-size:10px}.term-tag{font-size:10px}.rail-title button{font-size:10px}.empty-dates strong{font-size:11px}.empty-dates p{font-size:10px}.rail-tip strong{font-size:11px}.rail-tip p,.rail-tip button{font-size:10px}.rail-footer{font-size:10px}.event-date{font-size:10px}.event-info strong{font-size:11px}.event-info span{font-size:10px}.source-chip{font-size:10px}.toast{font-size:12px}.rail-menu-list button,.rail-menu-list button span{font-size:11px}.upload-notice-copy p{font-size:12px}
 .creator-credit{margin:5px 0 0;text-align:center;color:#a2a5b0;font-size:10px;letter-spacing:.1px}
+
+/* Format Gemini Markdown as a polished, readable answer instead of raw markers. */
+.bubble.assistant-answer{white-space:normal;overflow-wrap:anywhere;font-size:13px;line-height:1.75}
+.assistant-answer>p{margin:0 0 10px}
+.assistant-answer>p:last-child{margin-bottom:0}
+.assistant-answer h2,.assistant-answer h3,.assistant-answer h4{font-family:var(--display);color:#292b3d;line-height:1.35}
+.assistant-answer h2{font-size:16px;margin:15px 0 8px}
+.assistant-answer h3{font-size:14px;margin:14px 0 7px}
+.assistant-answer h4{font-size:13px;margin:12px 0 6px}
+.assistant-answer h2:first-child,.assistant-answer h3:first-child,.assistant-answer h4:first-child{margin-top:0}
+.assistant-answer ul,.assistant-answer ol{margin:5px 0 12px;padding-left:22px}
+.assistant-answer li{padding-left:3px;margin:4px 0}
+.assistant-answer li::marker{color:var(--purple)}
+.assistant-answer strong{color:#303247;font-weight:700}
+.assistant-answer em{color:#66637b}
+.assistant-answer hr{height:1px;border:0;background:#eceaf3;margin:13px 0}
+.assistant-answer code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.92em;background:#f4f2fa;border-radius:4px;padding:1px 4px;color:#5d49bc}
