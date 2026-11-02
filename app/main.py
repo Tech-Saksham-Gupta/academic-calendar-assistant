@@ -6,6 +6,7 @@ import json
 import re
 import secrets
 import string
+from time import perf_counter
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
@@ -171,9 +172,12 @@ def chat_stream(payload: ChatRequest, request: Request, response: Response):
             yield send({"type": "done"})
             return
 
+        request_started = perf_counter()
         try:
             yield send({"type": "status", "message": "Searching your uploaded calendar…"})
+            retrieval_started = perf_counter()
             sources = knowledge_for(session_id).retrieve(question)
+            retrieval_ms = round((perf_counter() - retrieval_started) * 1000)
             yield send({"type": "sources", "sources": [
                 {"name": item["source"], "page": item.get("page"), "excerpt": item["text"], "relevance": item["score"]}
                 for item in sources
@@ -185,8 +189,13 @@ def chat_stream(payload: ChatRequest, request: Request, response: Response):
                 calendar_events = extract_calendar_events(upload_dir)
 
             yield send({"type": "status", "message": "Preparing your answer…"})
+            generation_started = perf_counter()
             for update in stream_answer(question, sources, calendar_events=calendar_events):
                 yield send(update)
+            generation_ms = round((perf_counter() - generation_started) * 1000)
+            total_ms = round((perf_counter() - request_started) * 1000)
+            # Log phase durations only; never log the student's question or answer.
+            print(f"Chat timing: retrieval={retrieval_ms}ms, Gemini={generation_ms}ms, total={total_ms}ms")
             yield send({"type": "done"})
         except Exception as error:
             print(f"Streaming chat request failed: {error}")
