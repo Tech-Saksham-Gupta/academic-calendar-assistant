@@ -97,27 +97,100 @@ function showToast(message) {
 }
 
 function renderAnswerText(container, text) {
-  // Render the small Markdown subset Gemini commonly uses without injecting HTML.
-  // Unknown markup is left as plain text, so model output cannot run scripts.
-  // Source chips below the answer already show document names and page numbers.
+  // Render Gemini's useful Markdown as real elements without injecting HTML.
+  // All answer text goes through text nodes, so model output cannot run scripts.
   const cleanText = String(text).replace(/\s*\[[^\]]+\.(?:pdf|md|txt|csv)\]/gi, '');
   const lines = cleanText.split(/\r?\n/);
-  lines.forEach((line, lineIndex) => {
-    if (lineIndex > 0) container.append(document.createElement('br'));
-    const cleaned = line.replace(/^\s*[-*]\s+/, '');
-    const pattern = /(\*\*[^*]+\*\*|\*[^*]+\*)/g;
+  container.classList.add('assistant-answer');
+
+  function appendInlineMarkdown(parent, value) {
+    const pattern = /(\*\*[^*]+\*\*|\*[^*\n]+\*|`[^`\n]+`)/g;
     let cursor = 0;
-    for (const match of cleaned.matchAll(pattern)) {
+    for (const match of value.matchAll(pattern)) {
       const index = match.index;
-      if (index > cursor) container.append(document.createTextNode(cleaned.slice(cursor, index)));
-      const isBold = match[0].startsWith('**');
-      const emphasis = document.createElement(isBold ? 'strong' : 'em');
-      emphasis.textContent = match[0].slice(isBold ? 2 : 1, isBold ? -2 : -1);
-      container.append(emphasis);
+      if (index > cursor) parent.append(document.createTextNode(value.slice(cursor, index)));
+      const token = match[0];
+      const isBold = token.startsWith('**');
+      const isCode = token.startsWith('`');
+      const element = document.createElement(isBold ? 'strong' : isCode ? 'code' : 'em');
+      // Bold markers use two characters; inline code and italics use one.
+      const markerLength = isBold ? 2 : 1;
+      element.textContent = token.slice(markerLength, -markerLength);
+      parent.append(element);
       cursor = index + match[0].length;
     }
-    if (cursor < cleaned.length) container.append(document.createTextNode(cleaned.slice(cursor)));
+    if (cursor < value.length) parent.append(document.createTextNode(value.slice(cursor)));
+  }
+
+  let paragraphLines = [];
+  let currentList = null;
+  let currentListType = '';
+
+  function flushParagraph() {
+    if (!paragraphLines.length) return;
+    const paragraph = document.createElement('p');
+    paragraphLines.forEach((line, index) => {
+      if (index) paragraph.append(document.createElement('br'));
+      appendInlineMarkdown(paragraph, line);
+    });
+    container.append(paragraph);
+    paragraphLines = [];
+  }
+
+  function closeList() {
+    currentList = null;
+    currentListType = '';
+  }
+
+  lines.forEach((rawLine) => {
+    const line = rawLine.trim();
+    if (!line) {
+      flushParagraph();
+      closeList();
+      return;
+    }
+
+    const heading = line.match(/^(#{1,4})\s+(.+)$/);
+    if (heading) {
+      flushParagraph();
+      closeList();
+      const level = Math.min(4, Math.max(2, heading[1].length + 1));
+      const title = document.createElement(`h${level}`);
+      appendInlineMarkdown(title, heading[2]);
+      container.append(title);
+      return;
+    }
+
+    if (/^(?:---+|\*\*\*+|___+)\s*$/.test(line)) {
+      flushParagraph();
+      closeList();
+      container.append(document.createElement('hr'));
+      return;
+    }
+
+    const unordered = line.match(/^[-*]\s+(.+)$/);
+    const ordered = line.match(/^\d+[.)]\s+(.+)$/);
+    const listMatch = unordered || ordered;
+    if (listMatch) {
+      flushParagraph();
+      const listType = ordered ? 'ol' : 'ul';
+      if (!currentList || currentListType !== listType) {
+        closeList();
+        currentList = document.createElement(listType);
+        currentListType = listType;
+        container.append(currentList);
+      }
+      const item = document.createElement('li');
+      appendInlineMarkdown(item, listMatch[1]);
+      currentList.append(item);
+      return;
+    }
+
+    closeList();
+    paragraphLines.push(line);
   });
+
+  flushParagraph();
 }
 
 function addMessage(text, role, sources = []) {
