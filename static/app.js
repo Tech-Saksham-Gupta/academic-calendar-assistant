@@ -5,6 +5,8 @@ const conversation = document.querySelector('#conversation');
 const welcome = document.querySelector('#welcome');
 const filePicker = document.querySelector('#file-picker');
 const toast = document.querySelector('#toast');
+// Keep recent turns in this browser so short replies can refer to earlier questions.
+const chatHistory = [];
 const dateFormatter = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
 
 function parseLocalDate(isoDate) {
@@ -237,6 +239,7 @@ async function ask(question) {
   addMessage(cleanQuestion, 'user');
   input.value = '';
   input.style.height = 'auto';
+  const recentHistory = chatHistory.slice(-10);
   const pending = document.createElement('article');
   pending.className = 'message';
   pending.innerHTML = '<div class="message-mark">✳</div><div class="bubble typing">Connecting to Campus Compass…</div>';
@@ -244,7 +247,7 @@ async function ask(question) {
   try {
     const response = await fetch('/api/chat/stream', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question: cleanQuestion }),
+      body: JSON.stringify({ question: cleanQuestion, history: recentHistory }),
     });
 
     if (!response.ok) {
@@ -293,6 +296,11 @@ async function ask(question) {
 
     pending.remove();
     addMessage(answer, 'assistant', sources);
+    chatHistory.push(
+      { role: 'user', content: cleanQuestion.slice(0, 1200) },
+      { role: 'assistant', content: answer.slice(0, 1200) },
+    );
+    if (chatHistory.length > 10) chatHistory.splice(0, chatHistory.length - 10);
   } catch (error) {
     pending.remove();
     addMessage(`I couldn't complete that request. ${error.message}`, 'assistant');
