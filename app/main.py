@@ -9,6 +9,7 @@ import string
 from datetime import date, datetime
 from time import perf_counter
 from typing import Literal
+from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
@@ -156,10 +157,13 @@ def answer_context(question: str, session_id: str, history: list[dict] | None = 
     previous_user_messages = [turn["content"] for turn in history if turn["role"] == "user"]
     conversation_query = " ".join([*previous_user_messages, question])
     planning = is_study_plan_question(conversation_query)
-    if planning and not study_plan_has_exam_details(conversation_query, history):
-        # The assistant should ask for the missing subject/date first, without
-        # attaching unrelated retrieved pages to a clarification message.
-        return [], None
+    if planning:
+        details = extract_planner_details(question, history)
+        details_complete = study_plan_has_exam_details(conversation_query, history)
+        hours_complete = details["daily_study_hours_provided"] or details["default_accepted"]
+        if not details_complete or not hours_complete:
+            # Ask only for missing planner details; don't attach unrelated references.
+            return [], None
 
     sources = knowledge_for(session_id).retrieve(conversation_query)
     calendar_events = None
@@ -291,7 +295,27 @@ def extract_planner_details(
     hours_matches = []
     for message in user_messages:
         hours_matches.extend(re.findall(r"\b(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h)\b", message, re.IGNORECASE))
-    daily_hours = hours_matches[-1] if hours_matches else "2 (default assumption)"
+    assistant_asked_hours = bool(history) and any(
+        turn["role"] == "assistant"
+        and re.search(r"\b(?:hours?|daily study time)\b", turn["content"], re.IGNORECASE)
+        for turn in history
+    )
+    if not hours_matches and assistant_asked_hours:
+        # If the assistant just asked for hours, accept a bare number such as "3".
+        bare_number = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*", question)
+        if bare_number:
+            hours_matches.append(bare_number.group(1))
+    daily_hours_provided = bool(hours_matches)
+    daily_hours = hours_matches[-1] if hours_matches else "not specified yet"
+    default_accepted = False
+    if not daily_hours_provided and history:
+        affirmative_default = question.strip().casefold() in {"default", "use default", "use the default", "yes", "yeah", "sure", "okay", "ok", "go ahead", "continue", "proceed"} or any(phrase in question.casefold() for phrase in (
+            "use the default", "use default", "assume 2", "2 hours", "go ahead", "you decide",
+            "doesn't matter", "does not matter", "no preference", "proceed", "continue",
+        ))
+        if assistant_asked_hours and affirmative_default:
+            daily_hours = "2 (default accepted by the student)"
+            default_accepted = True
 
     lowered = combined.casefold()
     if any(phrase in lowered for phrase in ("zero prep", "no preparation", "not started", "starting from scratch")):
@@ -309,6 +333,8 @@ def extract_planner_details(
         "exam_date": exam_date or "not specified yet",
         "date_year_assumed": date_was_assumed,
         "daily_study_hours": daily_hours,
+        "daily_study_hours_provided": daily_hours_provided,
+        "default_accepted": default_accepted,
         "preparation_level": preparation,
         "difficult_topics": difficult_topics,
     }
@@ -429,7 +455,7 @@ def chat_stream(payload: ChatRequest, request: Request, response: Response):
             yield send({"type": "done"})
         except Exception as error:
             print(f"Streaming chat request failed: {error}")
-            yield send({"type": "error", "message": "I couldn't complete that request. Please try again in a moment."})
+            yield send({"type": "error", "message": "Please try again in a moment."})
 
     stream_response = StreamingResponse(
         event_stream(),
